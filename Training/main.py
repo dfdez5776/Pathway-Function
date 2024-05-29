@@ -4,11 +4,10 @@ import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
 
-from agent_learning import OptimizerSpec, On_Policy_Agent, Off_Policy_Agent
-from utils.gym import get_env, get_wrapper_by_name
+from agent_training import OptimizerSpec, On_Policy_Agent
+from two_link_env import TwoLinkArmEnv
 import torch
 import config
-from utils.custom_optim import CustomAdamOptimizer
 
 def main():
 
@@ -18,7 +17,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = Lick_Env_Cont(args.action_dim, args.timesteps, args.thresh, args.dt, args.beta, args.bg_scale, args.trajectory, args.full_alm_path, args.alm_hid_units)
+    env = TwoLinkArmEnv()
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(

@@ -1,10 +1,3 @@
-# ############################################
-# Two link robot arm simulation environment
-#
-# Author : Deepak Raina @ IIT Delhi
-# Version : 0.4
-# ############################################
-
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding

@@ -29,17 +29,10 @@ class On_Policy_Agent():
                 seed,
                 inp_dim,
                 hid_dim,
-                out_dim,
                 action_dim,
                 optimizer_spec_actor,
                 optimizer_spec_critic,
-                replay_buffer_size,
-                policy_batch_size,
-                alpha,
                 gamma,
-                automatic_entropy_tuning, 
-                learning_starts,
-                learning_freq,
                 save_iter,
                 log_steps,
                 frame_skips,
@@ -47,25 +40,16 @@ class On_Policy_Agent():
                 reward_save_path,
                 steps_save_path,
                 action_scale,
-                action_bias,
-                policy_type,
-                update_iters):
+                action_bias):
 
         self.env = env
         self.seed = seed
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
-        self.out_dim = out_dim
         self.action_dim = action_dim
         self.optimizer_spec_actor = optimizer_spec_actor
         self.optimizer_spec_critic = optimizer_spec_critic
-        self.replay_buffer_size = replay_buffer_size
-        self.batch_size = policy_batch_size
-        self.alpha = alpha
         self.gamma = gamma
-        self.automatic_entropy_tuning = automatic_entropy_tuning
-        self.learning_starts = learning_starts
-        self.learning_freq = learning_freq
         self.save_iter = save_iter
         self.log_steps = log_steps
         self.frame_skips = frame_skips
@@ -74,11 +58,7 @@ class On_Policy_Agent():
         self.steps_save_path = steps_save_path
         self.action_scale = action_scale
         self.action_bias = action_bias
-        self.policy_type = policy_type
-        self.update_iters = update_iters
-
-        self.striatum_data = sio.loadmat(f'data/firing_rates/striatum_fr_population_1.1s.mat')['fr_population']
-        self.striatum_data = self._Normalize_Data(np.squeeze(self.striatum_data), np.min(self.striatum_data), np.max(self.striatum_data))
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def _Normalize_Data(self, data, min, max):
         '''
@@ -91,8 +71,9 @@ class On_Policy_Agent():
             Selection of action from policy, consistent across training methods
         '''
         
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-        hn = hn
+        state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
+        hn = hn.to(self.device)
+        x = x.to(self.device)
 
         if evaluate == False: 
             action, _, _, _, hn, x, _ = policy.sample(state, hn, x, sampling=True)
@@ -107,8 +88,8 @@ class On_Policy_Agent():
             Train the agent using one step actor critic
         '''
 
-        actor_bg = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias) #in models.py, input for multiregional only input_dim, hid_dim, action_dim
-        critic_bg = RNN(self.inp_dim, self.hid_dim, self.out_dim)
+        actor_bg = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        critic_bg = RNN(self.inp_dim, self.hid_dim).to(self.device)
 
         actor_bg_optimizer = self.optimizer_spec_actor.constructor(actor_bg.parameters(), **self.optimizer_spec_actor.kwargs)
         critic_bg_optimizer = self.optimizer_spec_critic.constructor(critic_bg.parameters(), **self.optimizer_spec_critic.kwargs)
@@ -139,8 +120,8 @@ class On_Policy_Agent():
         ep_trajectory = []
 
         #num_layers specified in the policy model 
-        h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
-        x_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
+        h_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
+        x_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
@@ -150,16 +131,15 @@ class On_Policy_Agent():
 
             ### TRACKING REWARD + EXPERIENCE TUPLE###
             for _ in range(self.frame_skips):
-                next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
+                next_state, reward, done = self.env.step(episode_steps, action)
                 episode_steps += 1
-                episode_reward += reward
+                episode_reward += reward[0]
                 if done == True:
                     break
 
             mask = 1.0 if episode_steps == self.env.max_timesteps else float(not done)
 
             ep_trajectory.append((state, action, reward, next_state, mask))
-            
 
             state = next_state
             h_prev = h_current
@@ -175,8 +155,8 @@ class On_Policy_Agent():
                 avg_reward.append(episode_reward)
 
                 # reset training conditions
-                h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
-                x_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
+                h_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
+                x_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
                 state = self.env.reset(total_episodes) 
 
                 # resest lists
@@ -256,21 +236,16 @@ class On_Policy_Agent():
         lambda_actor = .5
 
         
-        state = torch.tensor([step[0] for step in tuple], device="cpu").unsqueeze(0)
-        action = torch.tensor([step[1] for step in tuple], device="cpu").unsqueeze(0)
-        reward = torch.tensor([step[2] for step in tuple], device="cpu").unsqueeze(0)
-        next_state = torch.tensor([step[3] for step in tuple], device="cpu").unsqueeze(0)
-        mask = torch.tensor([step[4] for step in tuple], device="cpu").unsqueeze(1)
+        state = torch.tensor([step[0] for step in tuple], device=self.device).unsqueeze(0)
+        action = torch.tensor([step[1] for step in tuple], device=self.device).unsqueeze(0)
+        reward = torch.tensor([step[2] for step in tuple], device=self.device).unsqueeze(0)
+        next_state = torch.tensor([step[3] for step in tuple], device=self.device).unsqueeze(0)
+        mask = torch.tensor([step[4] for step in tuple], device=self.device).unsqueeze(1)
 
-        print(state.shape, next_state.shape, reward.shape, mask.shape)
-
-        h_update = torch.zeros(size=(1, 1, hid_dim), device="cpu", dtype = torch.float32)
-        x_update = torch.zeros(size=(1, 1, hid_dim), device="cpu", dtype = torch.float32)
-
-        
+        h_update = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
+        x_update = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
 
         delta = reward + gamma * mask * value(next_state, h_update) - value(state, h_update)
-        # TODO try either summing all deltas or only using last one
         delta = delta.squeeze(0)[-1]
 
         # Critic Update

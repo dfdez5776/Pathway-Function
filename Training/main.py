@@ -17,10 +17,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = TwoLinkArmEnv()
-
-    ## RUN TRAINING ##
-    
+    env = TwoLinkArmEnv(args.max_timesteps)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(
@@ -37,17 +34,10 @@ def main():
                                 args.seed,
                                 args.inp_dim,
                                 args.hid_dim,
-                                args.out_dim,
                                 args.action_dim,
                                 optimizer_spec_actor,
                                 optimizer_spec_critic,
-                                args.replay_buffer_size,
-                                args.policy_batch_size,
-                                args.alpha,
                                 args.gamma,
-                                args.automatic_entropy_tuning,
-                                args.learning_starts,
-                                args.learning_freq,
                                 args.save_iter,
                                 args.log_steps,
                                 args.frame_skips,
@@ -55,9 +45,7 @@ def main():
                                 args.reward_save_path,
                                 args.steps_save_path,
                                 args.action_scale,
-                                args.action_bias,
-                                args.policy_type,
-                                args.update_iters)
+                                args.action_bias)
 
     rl_setup.train(args.max_steps)
 

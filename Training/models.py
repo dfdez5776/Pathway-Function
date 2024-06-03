@@ -9,7 +9,7 @@ import math
 ######### MULTIREGIONAL MODEL ##########
 
 class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim):
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias):
         super(RNN_MultiRegional, self).__init__()
         
         '''
@@ -24,8 +24,10 @@ class RNN_MultiRegional(nn.Module):
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
         self.action_dim = action_dim
-        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))]).cuda()
-        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))]).cuda()
+        self.action_scale = action_scale 
+        self.action_bias = action_bias
+        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))])
+        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))])
         
         # Identity Matrix of 0.5 Not Trained
         self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
@@ -36,6 +38,8 @@ class RNN_MultiRegional(nn.Module):
         # Excitatory Connections
         self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
 
+        
+
         nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.str2m1_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
@@ -45,32 +49,33 @@ class RNN_MultiRegional(nn.Module):
         # Striatum recurrent weights
         sparse_matrix = torch.empty_like(self.str2str_weight_l0_hh)
         nn.init.sparse_(sparse_matrix, 0.85)
-        sparse_mask = torch.where(sparse_matrix != 0, 1, 0).cuda()
-        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).cuda()
-        self.str2str_fixed = torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01).cuda() * sparse_mask
-        self.str2str_D = -1*torch.eye(int(hid_dim/2)).cuda()
+        sparse_mask = torch.where(sparse_matrix != 0, 1, 0)
+        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh)
+        self.str2str_fixed = torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask
+        self.str2str_D = -1*torch.eye(int(hid_dim/2))
 
-        self.m12m1_D = torch.eye(int(hid_dim/2)).cuda()
+        self.m12m1_D = torch.eye(int(hid_dim/2))
         self.m12m1_D[int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):, 
                         int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):] *= -1
         
         # ALM to striatum weights
         self.m12str_mask_excitatory = torch.ones(size=(int(hid_dim/2), int(hid_dim/2) - int(0.3*(hid_dim/2))))
         self.m12str_mask_inhibitory = torch.zeros(size=(int(hid_dim/2), int(0.3*(hid_dim/2))))
-        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).cuda()
+        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1)
         
         # Input weights
         self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim)))
         nn.init.uniform_(self.inp_weight, 0, 0.1)
 
         # Behavioral output layer
-        self.fc1 = nn.Linear(hid_dim, action_dim)
+        self.mean_linear = nn.Linear(hid_dim, action_dim)
+        self.std_linear = nn.Linear(hid_dim, action_dim)
 
         # Time constants for networks (not sure what would be biologically plausible?)
         t_str = 0.1 * torch.ones(int(hid_dim/2))
         t_m1_excitatory = 0.1 * torch.ones(int(hid_dim/2) - int(0.3*(hid_dim/2)))
         t_m1_inhibitory = 0.1 * torch.ones(int(0.3*(hid_dim/2)))
-        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory]).cuda()
+        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory])
 
     def forward(self, inp, hn, x):
 
@@ -115,9 +120,45 @@ class RNN_MultiRegional(nn.Module):
         x_last = x_out[:, -1, :].unsqueeze(0)
 
         # Behavioral output layer
-        out = torch.sigmoid(self.fc1(rnn_out * self.alm_mask))
-        
-        return out, hn_last, rnn_out, x_last, x_out
+        mean_out = self.mean_linear(rnn_out * self.alm_mask)
+        std_out = self.std_linear(rnn_out * self.alm_mask)
+
+        return mean_out, std_out, rnn_out, hn_last, x_last, x_out
+    
+    def sample(self, state, hn, x, sampling):
+
+        epsilon = 1e-4   
+
+        mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
+
+        mean_size = mean.size()
+        log_std_size = log_std.size()
+
+        mean = mean.reshape(-1, mean.size()[-1])
+        log_std = log_std.reshape(-1, log_std.size()[-1])
+
+        std = log_std.exp()
+        normal = Normal(mean, std)
+        x_t = normal.rsample()
+
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+
+        log_prob = normal.log_prob(x_t)
+
+        # Enforce the action_bounds
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+        log_prob = log_prob.sum(-1, keepdim=True)
+
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+
+        if sampling == False:
+            action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
+            log_prob = log_prob.reshape(log_std_size[0], log_std_size[1], 1) 
+            mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
+
+        return action, log_prob, mean, rnn_out, hn, x_last, x_out
+
     
 
 ########## SINGLE RNN MODEL ##########

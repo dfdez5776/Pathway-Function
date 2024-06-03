@@ -19,6 +19,9 @@ def main():
     torch.manual_seed(args.seed)
     env = TwoLinkArmEnv()
 
+    ## RUN TRAINING ##
+    
+
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(
         constructor=optim.AdamW,
@@ -33,11 +36,12 @@ def main():
     rl_setup = On_Policy_Agent(env,
                                 args.seed,
                                 args.inp_dim,
-                                args.hidden_dim,
+                                args.hid_dim,
+                                args.out_dim,
                                 args.action_dim,
                                 optimizer_spec_actor,
                                 optimizer_spec_critic,
-                                args.policy_replay_size,
+                                args.replay_buffer_size,
                                 args.policy_batch_size,
                                 args.alpha,
                                 args.gamma,

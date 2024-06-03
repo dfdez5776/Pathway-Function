@@ -10,9 +10,9 @@ alpha = 0.2
 automatic_entropy_tuning = True
 seed = 1
 policy_batch_size = 8
-hidden_dim = 100
-action_dim = 1
-inp_dim = 102
+hid_dim = 100
+action_dim = 2
+inp_dim = 6
 log_steps = 10
 policy_replay_size = 50000
 thresh = 1
@@ -29,6 +29,9 @@ alm_hid_units = 100
 update_iters = 1
 max_steps = 1000000
 update_method = "sac"
+save_iter = 10
+replay_buffer_size = 10
+
 
 ### MODEL SAVING ###
 model_save_path = "checkpoints/lick_attractor_100d_on_policy"            

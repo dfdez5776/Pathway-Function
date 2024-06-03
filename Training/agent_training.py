@@ -13,8 +13,8 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 
-from utils.gym import get_wrapper_by_name
-from agent_models import Actor, Critic, Value
+#from utils.gym import get_wrapper_by_name  
+from models import RNN_MultiRegional, RNN  #Changed Actor to RNN_Multiregional(nn.Module), Value to RNN, not sure for Critic
 import scipy.io as sio
 import matplotlib.pyplot as plt
 
@@ -29,11 +29,12 @@ class On_Policy_Agent():
                 seed,
                 inp_dim,
                 hid_dim,
+                out_dim,
                 action_dim,
                 optimizer_spec_actor,
                 optimizer_spec_critic,
                 replay_buffer_size,
-                batch_size,
+                policy_batch_size,
                 alpha,
                 gamma,
                 automatic_entropy_tuning, 
@@ -54,11 +55,12 @@ class On_Policy_Agent():
         self.seed = seed
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
+        self.out_dim = out_dim
         self.action_dim = action_dim
         self.optimizer_spec_actor = optimizer_spec_actor
         self.optimizer_spec_critic = optimizer_spec_critic
         self.replay_buffer_size = replay_buffer_size
-        self.batch_size = batch_size
+        self.batch_size = policy_batch_size
         self.alpha = alpha
         self.gamma = gamma
         self.automatic_entropy_tuning = automatic_entropy_tuning
@@ -75,7 +77,7 @@ class On_Policy_Agent():
         self.policy_type = policy_type
         self.update_iters = update_iters
 
-        self.striatum_data = sio.loadmat(f'data/firing_rates/striatum_fr_population_cond1.mat')['fr_population']
+        self.striatum_data = sio.loadmat(f'data/firing_rates/striatum_fr_population_1.1s.mat')['fr_population']
         self.striatum_data = self._Normalize_Data(np.squeeze(self.striatum_data), np.min(self.striatum_data), np.max(self.striatum_data))
 
     def _Normalize_Data(self, data, min, max):
@@ -84,20 +86,20 @@ class On_Policy_Agent():
         '''
         return (data - min) / (max - min)
 
-    def select_action(self, policy, state, hn, evaluate):
+    def select_action(self, policy, state, hn, x, evaluate):
         '''
             Selection of action from policy, consistent across training methods
         '''
-
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).cuda()
-        hn = hn.cuda()
+        
+        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        hn = hn
 
         if evaluate == False: 
-            action, _, _, _, hn = policy.sample(state, hn, sampling=True)
+            action, _, _, _, hn, x, _ = policy.sample(state, hn, x, sampling=True)
         else:
-            _, _, action, _, hn = policy.sample(state, hn, sampling=True)
+            _, _, action, _, hn, x, _ = policy.sample(state, hn, x, sampling=True)
 
-        return action.detach().cpu().tolist()[0], hn.detach()
+        return action.detach().cpu().numpy(), hn.detach(), x.detach()
     
     def train(self, max_steps):
 
@@ -105,8 +107,8 @@ class On_Policy_Agent():
             Train the agent using one step actor critic
         '''
 
-        actor_bg = Actor(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias).cuda()
-        critic_bg = Value(self.inp_dim, self.hid_dim).cuda()
+        actor_bg = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias) #in models.py, input for multiregional only input_dim, hid_dim, action_dim
+        critic_bg = RNN(self.inp_dim, self.hid_dim, self.out_dim)
 
         actor_bg_optimizer = self.optimizer_spec_actor.constructor(actor_bg.parameters(), **self.optimizer_spec_actor.kwargs)
         critic_bg_optimizer = self.optimizer_spec_critic.constructor(critic_bg.parameters(), **self.optimizer_spec_critic.kwargs)
@@ -137,13 +139,14 @@ class On_Policy_Agent():
         ep_trajectory = []
 
         #num_layers specified in the policy model 
-        h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cuda")
+        h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
+        x_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
 
             with torch.no_grad():
-                action, h_current = self.select_action(actor_bg, state, h_prev, evaluate=False)  # Sample action from policy
+                action, h_current, x_current = self.select_action(actor_bg, state, h_prev, x_prev, evaluate=False)  # Sample action from policy
 
             ### TRACKING REWARD + EXPERIENCE TUPLE###
             for _ in range(self.frame_skips):
@@ -156,9 +159,11 @@ class On_Policy_Agent():
             mask = 1.0 if episode_steps == self.env.max_timesteps else float(not done)
 
             ep_trajectory.append((state, action, reward, next_state, mask))
+            
 
             state = next_state
             h_prev = h_current
+            x_prev = x_current 
 
             ### EARLY TERMINATION OF EPISODE
             if done:
@@ -170,7 +175,8 @@ class On_Policy_Agent():
                 avg_reward.append(episode_reward)
 
                 # reset training conditions
-                h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cuda")
+                h_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
+                x_prev = torch.zeros(size=(1, 1, self.hid_dim), device="cpu")
                 state = self.env.reset(total_episodes) 
 
                 # resest lists
@@ -249,13 +255,19 @@ class On_Policy_Agent():
         lambda_critic = .5
         lambda_actor = .5
 
-        state = torch.tensor([step[0] for step in tuple], device="cuda").unsqueeze(0)
-        action = torch.tensor([step[1] for step in tuple], device="cuda").unsqueeze(0)
-        reward = torch.tensor([step[2] for step in tuple], device="cuda").unsqueeze(1)
-        next_state = torch.tensor([step[3] for step in tuple], device="cuda").unsqueeze(0)
-        mask = torch.tensor([step[4] for step in tuple], device="cuda").unsqueeze(1)
+        
+        state = torch.tensor([step[0] for step in tuple], device="cpu").unsqueeze(0)
+        action = torch.tensor([step[1] for step in tuple], device="cpu").unsqueeze(0)
+        reward = torch.tensor([step[2] for step in tuple], device="cpu").unsqueeze(0)
+        next_state = torch.tensor([step[3] for step in tuple], device="cpu").unsqueeze(0)
+        mask = torch.tensor([step[4] for step in tuple], device="cpu").unsqueeze(1)
 
-        h_update = torch.zeros(size=(1, 1, hid_dim), device="cuda")
+        print(state.shape, next_state.shape, reward.shape, mask.shape)
+
+        h_update = torch.zeros(size=(1, 1, hid_dim), device="cpu", dtype = torch.float32)
+        x_update = torch.zeros(size=(1, 1, hid_dim), device="cpu", dtype = torch.float32)
+
+        
 
         delta = reward + gamma * mask * value(next_state, h_update) - value(state, h_update)
         # TODO try either summing all deltas or only using last one
@@ -279,7 +291,7 @@ class On_Policy_Agent():
         z_actor_func = {}
         for param in z_actor:
             z_actor_func[param] = (gamma * lambda_actor * z_actor[param]).detach()
-        _, log_prob, _, _, _ = actor.sample(state, h_update)
+        _, log_prob, _, _, _, _, _ = actor.sample(state, h_update, x_update, sampling = False)
         log_prob = torch.sum(log_prob.squeeze())
         log_prob.backward()
         for name, param in actor.named_parameters():

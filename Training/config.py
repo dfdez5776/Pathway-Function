@@ -61,7 +61,7 @@ def config_parser():
                         default=6, 
                         help='batch size (default: 6)')
 
-    parser.add_argument('--hidden_dim', 
+    parser.add_argument('--hid_dim', 
                         type=int, 
                         default=32, 
                         help='hidden size')
@@ -153,7 +153,7 @@ def config_parser():
 
     parser.add_argument('--update_iters', 
                         type=int, 
-                        default=10,
+                        default=1,
                         help='Number of times to iterate through weight updates each step')
 
     parser.add_argument('--update_method', 
@@ -165,6 +165,16 @@ def config_parser():
                         type=int, 
                         default=1000000,
                         help='maximum number of steps to use for training')
+    
+    parser.add_argument('--out_dim', 
+                        type=int, 
+                        default=1,
+                        help='output dimension for critic')
+    
+    parser.add_argument('--replay_buffer_size', 
+                        type=int, 
+                        default=10,
+                        help='memory of past experiences collected by agent')
 
     # Saving Parameters
     parser.add_argument('--model_save_path', 

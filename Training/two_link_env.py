@@ -11,7 +11,7 @@ import time
 import jax.numpy as np
 import jax
 from jax import jacfwd, hessian
-import numpy as np
+
 
 #Environment class
 class TwoLinkArmEnv(gym.Env):
@@ -31,7 +31,7 @@ class TwoLinkArmEnv(gym.Env):
         self.target_radius = 0.1
         self.max_speed = np.pi #rad/sec
         self.dt = 0.05 #time step
-        self.max_time = 5
+        self.max_timesteps = 100
         self.step_n = 0
         self.reward_ver = reward_type
         
@@ -47,9 +47,9 @@ class TwoLinkArmEnv(gym.Env):
             self.target_low = [-2, 0] #target min limit 
 
         #attributes
-        self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=np.float32)
-        self.observation_high = np.array(self.target_high*3 + [self.max_speed]*2)
-        self.observation_space = spaces.Box(low=-self.observation_high, high=self.observation_high, dtype=np.float32)
+        self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=onp.float32)
+        self.observation_high = onp.array(self.target_high*3 + [self.max_speed]*2)
+        self.observation_space = spaces.Box(low=-self.observation_high, high=self.observation_high, dtype=onp.float32)
         self.seed() #initialize a seed
     
     def __rk4_step(self, x, f, dt, *args):
@@ -98,7 +98,7 @@ class TwoLinkArmEnv(gym.Env):
         return 0.5 * self._m1 * (vels1[0]**2 + vels1[1]**2) + 0.5 * self._m2 *(vels2[0]**2 + vels2[1]**2)
 
     def __PE_derived(self, q):
-        return self._m1 * self._g * self.p1(q)[1] + self._m2 * self._g * self.p2(q)[1]
+        return self._m1 * self._g * self.__p1(q)[1] + self._m2 * self._g * self.__p2(q)[1]
 
     def __L_derived(self, q, qdot):
         return self.__KE_derived(q, qdot) - self.__PE_derived(q)
@@ -118,21 +118,33 @@ class TwoLinkArmEnv(gym.Env):
         """
         q, qdot = np.split(x, 2)
         
-        # Only control joint position, not velocity
-        J_u = np.array([1, 0, 0, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 0, 0],
-                       [0, 0, 0, 0]) @ u
+        
 
+        # Only control joint position, not velocity
+
+        
+        J_u = np.array([[1, 0],
+                       [0, 1]
+                       ]) @ u.T
+        
+        J_u = J_u.squeeze()
+
+        
         M_derived, C_derived, G_derived = self.__get_lagrange()
 
         M_inv = np.linalg.inv(M_derived(q, qdot))
+
+        
         b = C_derived(q, qdot) @ qdot - G_derived(q, qdot)
+        
+
 
         qddot = np.dot(
             M_inv, 
             J_u - b
         )
+
+        
 
         xdot = np.hstack([qdot, qddot])
         return xdot 
@@ -142,24 +154,36 @@ class TwoLinkArmEnv(gym.Env):
         return [seed]
     
     def reward(self):
-        hand_x, hand_y = self.__p1(self.state[:2]), self.__p2(self.state[:2])
-        hand_pos = np.array([hand_x, hand_y])
+        hand_pos = self.__p2(self.state[:2])
         return 1 / 1000**(self.euclidian_distance(hand_pos, self.target))
     
-    def done(self):
-        hand_x, hand_y = self.__p1(self.state[:2]), self.__p2(self.state[:2])
-        hand_pos = np.array([hand_x, hand_y])
-        if self.euclidean_distance(hand_pos, self.target) < self.target_radius:
+    def reset(self, episode):
+        if episode % 2 == 0 :
+            self.target = np.array([1.0, 0.0]) #[x,y]
+        else :
+            self.target = np.array([-1.0, 0.0]) #[x,y]
+        self.state = np.array([0.0]*4)
+        self.obs_state = np.append(self.target, self.state)
+        return onp.array(self.obs_state, dtype = onp.float32)
+
+    def done(self, t):
+        hand_pos = self.__p2(self.state[:2])
+        
+        
+        if self.euclidian_distance(hand_pos, self.target) < self.target_radius:
             return True
         # Also add max timestep termination
+        if t == self.max_timesteps:
+            return True
+        
         return False  
         
-    def step(self, action):
-        self.state = self.__rk4_step(self.__f, self.state, self.dt, action)
-        self.obs_state = np.append(self.target, self.state, dtype=np.float32)
+    def step(self, episode_steps, action, total_episodes):
+        self.state = self.__rk4_step(self.state, self.__f, self.dt, action)
+        self.obs_state = np.append(self.target, self.state)
         reward = self.reward()
-        done = self.done()
-        return self.obs_state, reward, done
+        done = self.done(episode_steps)
+        return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
 
     def render(self, mode='human',close=False):
         #close the viewer when needed

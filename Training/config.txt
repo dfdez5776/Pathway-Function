@@ -1,39 +1,22 @@
 ### GENERAL TRAINING PARAMETERS ###
 gamma = 0.99
-tau = 0.005
 lr = 1e-4
 weight_decay = 1e-6
 eps = 0.01
-learning_freq = 1
-learning_starts = 100
-alpha = 0.2
-automatic_entropy_tuning = True
 seed = 1
-policy_batch_size = 8
 hid_dim = 100
 action_dim = 2
 inp_dim = 6
 log_steps = 10
-policy_replay_size = 50000
-thresh = 1
-dt = 0.01
-timesteps = 300
-beta = .99
-bg_scale = .1
+dt = 0.001
+max_timesteps = 100
 frame_skips = 1
 action_scale = 0.5
 action_bias = 0.5
-full_alm_path = "checkpoints/rnn_goal_data_100n_delay.pth"
-policy_type = "None"
-alm_hid_units = 100
-update_iters = 1
 max_steps = 1000000
-update_method = "sac"
 save_iter = 10
-replay_buffer_size = 10
-
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/lick_attractor_100d_on_policy"            
-reward_save_path = "training_reports/rewards_lick_attractor_100d_on_policy"      
-steps_save_path = "training_reports/steps_lick_attractor_100d_on_policy"        
+model_save_path = "checkpoints/two_link_bg"            
+reward_save_path = "training_reports/two_link_bg"      
+steps_save_path = "training_reports/two_link_bg"        

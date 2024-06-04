@@ -11,11 +11,11 @@ import time
 import jax.numpy as np
 import jax
 from jax import jacfwd, hessian
-
+from arm_vis import Arm
 
 #Environment class
 class TwoLinkArmEnv(gym.Env):
-    def __init__(self, reward_type = 0):
+    def __init__(self, max_timesteps, reward_type = 0):
 
         self.target = np.array([0.0, 0.0]) #[x,y]
         self.state = np.array([0.0]*4) #[theta1, theta2, thetadot1, thetadot2]
@@ -24,14 +24,14 @@ class TwoLinkArmEnv(gym.Env):
         self.viewer = None 
         self._l1 = 1.0
         self._l2 = 1.0
-        self._m1 = 0.5
-        self._m2 = 0.5
+        self._m1 = 0.1
+        self._m2 = 0.1
         self._g = 9.81
 
         self.target_radius = 0.1
         self.max_speed = np.pi #rad/sec
         self.dt = 0.05 #time step
-        self.max_timesteps = 100
+        self.max_timesteps = max_timesteps
         self.step_n = 0
         self.reward_ver = reward_type
         
@@ -41,10 +41,7 @@ class TwoLinkArmEnv(gym.Env):
         # Joint max-min limit
         self.joint_high = [np.pi, np.pi]
         self.joint_low = [-1*i for i in self.joint_high]
-
-        if self.reward_ver == 3:
-            self.joint_low = [0.0, 0.0] #joint min limit 
-            self.target_low = [-2, 0] #target min limit 
+        self.vis = Arm(self._l1, self._l2, self._m1, self._m2)
 
         #attributes
         self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=onp.float32)
@@ -117,34 +114,19 @@ class TwoLinkArmEnv(gym.Env):
             xdot = [qdot, qddot]
         """
         q, qdot = np.split(x, 2)
-        
-        
 
         # Only control joint position, not velocity
-
-        
-        J_u = np.array([[1, 0],
-                       [0, 1]
-                       ]) @ u.T
-        
+        J_u = np.eye(2) @ u.T
         J_u = J_u.squeeze()
 
-        
         M_derived, C_derived, G_derived = self.__get_lagrange()
-
         M_inv = np.linalg.inv(M_derived(q, qdot))
-
-        
         b = C_derived(q, qdot) @ qdot - G_derived(q, qdot)
         
-
-
         qddot = np.dot(
             M_inv, 
             J_u - b
         )
-
-        
 
         xdot = np.hstack([qdot, qddot])
         return xdot 
@@ -167,93 +149,31 @@ class TwoLinkArmEnv(gym.Env):
         return onp.array(self.obs_state, dtype = onp.float32)
 
     def done(self, t):
+        # Get hand position
         hand_pos = self.__p2(self.state[:2])
-        
-        
+        # See if distance is out of range
         if self.euclidian_distance(hand_pos, self.target) < self.target_radius:
             return True
-        # Also add max timestep termination
+        # Terminate if at max timestep
         if t == self.max_timesteps:
             return True
-        
         return False  
         
-    def step(self, episode_steps, action, total_episodes):
+    def step(self, episode_steps, action):
+        # Integrate and get state
         self.state = self.__rk4_step(self.state, self.__f, self.dt, action)
+        # Get full state
         self.obs_state = np.append(self.target, self.state)
+        # Get reward
         reward = self.reward()
+        # Get done
         done = self.done(episode_steps)
+        # Visualize
+        time.sleep(self.dt)
+        self.vis.render(self.state[:2])
+        # Return environment variables
         return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
 
-    def render(self, mode='human',close=False):
-        #close the viewer when needed
-        if close:
-            if self.viewer is not None:
-                self.viewer.close()
-                self.viewer = None
-            return
-        
-        #first time render is called on a new viewer, it has to be initialized
-        if self.viewer is None:
-            from gym.envs.classic_control import rendering
-            
-            #initialize viewer
-            self.viewer = rendering.Viewer(700,700)
-            self.viewer.set_bounds(-4.2, 4.2, -4.2, 4.2)
-            
-            #create target circle
-            target = rendering.make_circle(self.target_radius)
-            target.set_color(1,0,0)
-            self.target_transform = rendering.Transform()
-            target.add_attr(self.target_transform)
-            self.viewer.add_geom(target)
-            
-            #create first arm segment
-            link1 = rendering.make_capsule(self.arm_length,0.2)
-            link1.set_color(0.5, 0.5, 0.5)
-            self.link1_transform = rendering.Transform()
-            link1.add_attr(self.link1_transform)
-            self.viewer.add_geom(link1)
-            
-            #create first joint
-            joint1 = rendering.make_circle(0.1)
-            joint1.set_color(0, 0, 0)
-            # joint1.add_attr(self.link1_transform)
-            self.viewer.add_geom(joint1)
-
-            #create second arm segment
-            link2 = rendering.make_capsule(self.arm_length,0.2)
-            link2.set_color(0.65, 0.65, 0.65)
-            self.link2_transform = rendering.Transform()
-            link2.add_attr(self.link2_transform)
-            self.viewer.add_geom(link2)
-            
-            #create second joint
-            joint2 = rendering.make_circle(0.1)
-            joint2.set_color(0, 0, 1)
-            joint2.add_attr(self.link2_transform)
-            self.viewer.add_geom(joint2)
-            
-            #create end-effector circle
-            end_effector = rendering.make_circle(0.1)
-            end_effector.set_color(0,1,0)
-            self.end_effector_transform = rendering.Transform()
-            end_effector.add_attr(self.end_effector_transform)
-            self.viewer.add_geom(end_effector)
-            
-        obs_state = self.get_obs()
-        
-        #set the viewer in the object according to current state
-        self.link1_transform.set_rotation(self.state[0])
-        self.link2_transform.set_translation(obs_state[2],obs_state[3])
-        self.link2_transform.set_rotation(self.state[0] + self.state[1])
-        self.end_effector_transform.set_translation(obs_state[4],obs_state[5])
-        
-        # if self.last_action is None:
-        self.target_transform.set_translation(self.target[0],self.target[1])
-            
-        return self.viewer.render(return_rgb_array = mode == 'rgb_array')
-    
     def euclidian_distance(self, a, b):
         return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 

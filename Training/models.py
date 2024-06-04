@@ -9,7 +9,7 @@ import math
 ######### MULTIREGIONAL MODEL ##########
 
 class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias):
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
         super(RNN_MultiRegional, self).__init__()
         
         '''
@@ -26,8 +26,9 @@ class RNN_MultiRegional(nn.Module):
         self.action_dim = action_dim
         self.action_scale = action_scale 
         self.action_bias = action_bias
-        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))])
-        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))])
+        self.device = device
+        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))]).to(device)
+        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))]).to(device)
         
         # Identity Matrix of 0.5 Not Trained
         self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
@@ -37,8 +38,6 @@ class RNN_MultiRegional(nn.Module):
         self.m12m1_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
         # Excitatory Connections
         self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
-
-        
 
         nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.str2m1_weight_l0_hh, 0, 0.01)
@@ -50,18 +49,18 @@ class RNN_MultiRegional(nn.Module):
         sparse_matrix = torch.empty_like(self.str2str_weight_l0_hh)
         nn.init.sparse_(sparse_matrix, 0.85)
         sparse_mask = torch.where(sparse_matrix != 0, 1, 0)
-        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh)
-        self.str2str_fixed = torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask
-        self.str2str_D = -1*torch.eye(int(hid_dim/2))
+        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).to(device)
+        self.str2str_fixed = (torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask).to(device)
+        self.str2str_D = -1*torch.eye(int(hid_dim/2)).to(device)
 
-        self.m12m1_D = torch.eye(int(hid_dim/2))
+        self.m12m1_D = torch.eye(int(hid_dim/2)).to(device)
         self.m12m1_D[int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):, 
                         int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):] *= -1
         
         # ALM to striatum weights
-        self.m12str_mask_excitatory = torch.ones(size=(int(hid_dim/2), int(hid_dim/2) - int(0.3*(hid_dim/2))))
-        self.m12str_mask_inhibitory = torch.zeros(size=(int(hid_dim/2), int(0.3*(hid_dim/2))))
-        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1)
+        self.m12str_mask_excitatory = torch.ones(size=(int(hid_dim/2), int(hid_dim/2) - int(0.3*(hid_dim/2)))).to(device)
+        self.m12str_mask_inhibitory = torch.zeros(size=(int(hid_dim/2), int(0.3*(hid_dim/2)))).to(device)
+        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).to(device)
         
         # Input weights
         self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim)))
@@ -75,7 +74,7 @@ class RNN_MultiRegional(nn.Module):
         t_str = 0.1 * torch.ones(int(hid_dim/2))
         t_m1_excitatory = 0.1 * torch.ones(int(hid_dim/2) - int(0.3*(hid_dim/2)))
         t_m1_inhibitory = 0.1 * torch.ones(int(0.3*(hid_dim/2)))
-        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory])
+        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory]).to(device)
 
     def forward(self, inp, hn, x):
 
@@ -164,16 +163,15 @@ class RNN_MultiRegional(nn.Module):
 ########## SINGLE RNN MODEL ##########
 
 class RNN(nn.Module):
-    def __init__(self, inp_dim, hid_dim, out_dim):
+    def __init__(self, inp_dim, hid_dim):
         super(RNN, self).__init__()
 
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
-        self.out_dim = out_dim
         
         self.fc1 = nn.Linear(inp_dim, hid_dim)
         self.rnn = nn.RNN(hid_dim, hid_dim, batch_first=True)
-        self.fc2 = nn.Linear(hid_dim, out_dim)
+        self.fc2 = nn.Linear(hid_dim, 1)
     
     def forward(self, x, hn):
         

@@ -62,7 +62,7 @@ class Arm(Visualizer):
     def render(self, q):
 
         print(q)
-
+        
         self._link1.set_transform(
             mc_trans.compose_matrix(
                 translate=[0,0,0], 

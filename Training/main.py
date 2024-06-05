@@ -17,7 +17,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = TwoLinkArmEnv(args.max_timesteps)
+    env = TwoLinkArmEnv(args.max_timesteps, args.render_mode)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(

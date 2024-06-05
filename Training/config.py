@@ -64,6 +64,10 @@ def config_parser():
                         type=int, 
                         default=100, 
                         help='number of timesteps for single episode (num / dt)')
+    parser.add_argument('--render_mode', 
+                        type=str, 
+                        default="human", 
+                        help='human or rgb for visualization in pygame')
 
     parser.add_argument('--frame_skips', 
                         type=int, 

@@ -149,9 +149,9 @@ class TwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = np.array([1.0, 0.0]) #[x,y]
+            self.target = onp.array([1.0, 0.0]) #[x,y]
         else :
-            self.target = np.array([-1.0, 0.0]) #[x,y]
+            self.target = onp.array([-1.0, 0.0]) #[x,y]
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)
         self.render_2(self.state[:2])
@@ -213,8 +213,8 @@ class TwoLinkArmEnv(gym.Env):
         p1 = self.__p1(q)*scale
         p2 = self.__p2(q)*scale
 
-        xys = np.array([ p1, p2])
-        thetas = [q[0], q[0] + q[1]] #not rlly sure why they subtract pi but we can remove later
+        xys = np.array([[0,0] , p1, p2])
+        thetas = [q[0] - pi / 2, q[0] + q[1] - pi / 2] #not rlly sure why they subtract pi but we can remove later
         link_lengths = [self._l1*scale, self._l2*scale]
 
         pygame.draw.line(
@@ -222,6 +222,14 @@ class TwoLinkArmEnv(gym.Env):
             start_pos=(-2.2*scale + offset, 1 * scale + offset),
             end_pos = (2.2 * scale + offset, 1 * scale + offset),
             color = (0,0,0),
+        )
+
+        pygame.draw.circle(
+            surface,
+            center = onp.ndarray.tolist(self.target*scale + offset), 
+            radius = 2,
+            color = (255,0,0)
+
         )
 
         for ((x,y), th, llen) in zip(xys, thetas, link_lengths):

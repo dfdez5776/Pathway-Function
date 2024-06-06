@@ -67,7 +67,7 @@ def config_parser():
     parser.add_argument('--render_mode', 
                         type=str, 
                         default="human", 
-                        help='human or rgb for visualization in pygame')
+                        help='human or rgb_array for visualization in pygame. Human creates a display')
 
     parser.add_argument('--frame_skips', 
                         type=int, 

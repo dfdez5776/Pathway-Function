@@ -12,7 +12,7 @@ import time
 import jax.numpy as np
 import jax
 from jax import jacfwd, hessian
-from arm_vis import Arm
+
 
 #Environment class
 class TwoLinkArmEnv(gym.Env):
@@ -42,7 +42,7 @@ class TwoLinkArmEnv(gym.Env):
         # Joint max-min limit
         self.joint_high = [np.pi, np.pi]
         self.joint_low = [-1*i for i in self.joint_high]
-        self.vis = Arm(self._l1, self._l2, self._m1, self._m2)
+        
 
         #attributes
         self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=onp.float32)
@@ -149,9 +149,9 @@ class TwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([1.0, 0.0]) #[x,y]
+            self.target = onp.array([1.5, -1.0]) #[x,y]
         else :
-            self.target = onp.array([-1.0, 0.0]) #[x,y]
+            self.target = onp.array([-0.5, -1.0]) #[x,y]
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)
         self.render_2(self.state[:2])
@@ -179,7 +179,6 @@ class TwoLinkArmEnv(gym.Env):
         done = self.done(episode_steps)
         # Visualize
         time.sleep(self.dt)
-        self.vis.render(self.state[:2])
         #pygame visualizer
         self.render_2(self.state[:2])
         # Return environment variables
@@ -214,7 +213,7 @@ class TwoLinkArmEnv(gym.Env):
         p2 = self.__p2(q)*scale
 
         xys = np.array([[0,0] , p1, p2])
-        thetas = [q[0] - pi / 2, q[0] + q[1] - pi / 2] #not rlly sure why they subtract pi but we can remove later
+        thetas = [q[0] - pi / 2, q[0] + q[1] - pi / 2] 
         link_lengths = [self._l1*scale, self._l2*scale]
 
         pygame.draw.line(

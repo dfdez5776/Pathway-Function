@@ -141,6 +141,7 @@ class RNN_MultiRegional(nn.Module):
         x_t = normal.rsample()
 
         y_t = torch.tanh(x_t)
+        
         action = y_t * self.action_scale + self.action_bias
 
         log_prob = normal.log_prob(x_t)

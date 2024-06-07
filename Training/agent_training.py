@@ -121,6 +121,7 @@ class On_Policy_Agent():
 
         #num_layers specified in the policy model 
         h_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
+        
         x_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
 
         ### STEPS PER EPISODE ###

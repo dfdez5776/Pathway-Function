@@ -14,7 +14,7 @@ import numpy as onp
 from numpy import pi
 import time
 import jax.numpy as np
-from effector import Effector
+
 
 
 

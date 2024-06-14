@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from agent_training import OptimizerSpec, On_Policy_Agent
 from two_link_env import TwoLinkArmEnv
+from motornet_env import EffectorTwoLinkArmEnv
 import torch
 import config
 

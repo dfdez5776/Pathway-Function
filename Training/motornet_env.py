@@ -22,10 +22,11 @@ import jax.numpy as np
 
 class EffectorTwoLinkArmEnv(gym.Env):
     
-    def __init__(self, max_timesteps, reward_type = 0):
+    def __init__(self, max_timesteps, render_mode, reward_type = 0):
 
-        self.target = np.array([0.0, 0.5]) #[x,y]  
-        self.state = np.array([0.0]*4) #[theta1, theta2, thetadot1, thetadot2]
+        self.target = np.array([0.55, -0.3]) #[x,y]  
+        self.state = np.array([0.0]*4) 
+        self.joints = np.array([0.0]*4) 
         self.obs_state = None
 
         self.viewer = None 
@@ -64,6 +65,18 @@ class EffectorTwoLinkArmEnv(gym.Env):
             damping = 0,
             )
         
+        self._l1 = self.two_link_arm.skeleton.l1
+        self._l2 = self.two_link_arm.skeleton.l2
+
+        
+
+        #Visualization in Pygame
+        self.render_mode = render_mode
+        self.SCREEN_DIM = 200
+        self.screen = None
+        self.clock = None
+
+        
     
     
         
@@ -79,12 +92,13 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([0.0, 0.5]) #[x,y]
+            self.target = onp.array([0.55, -0.3]) #[x,y]
         else :
-            self.target = onp.array([0.0, -0.25]) #[x,y]
+            self.target = onp.array([-.25, -.3]) #[x,y]
         self.two_link_arm.reset()
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)
+        self.render_2(self.joints[:2])
         return onp.array(self.obs_state, dtype = onp.float32)
 
     def done(self, t):
@@ -106,14 +120,15 @@ class EffectorTwoLinkArmEnv(gym.Env):
         #Integrate and get state
 
         #Calling effector and integrating, default is Euler
-        self.two_link_arm.step(action)    #
+        self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip"
         state_dict = self.two_link_arm.states
 
-        #Extract cartestian coords                          
+        #Extract cartestian coords          
+        self.joints = onp.array(state_dict.get("joint").squeeze())               
+        
         self.state = np.array(state_dict.get("cartesian")) 
-                              #now state in numpy array, fingertip = coords of 'finger'
         self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
         # Get full state
         self.obs_state = np.append(self.target, self.state)
@@ -121,6 +136,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
         reward = self.reward()
         # Get done
         done = self.done(episode_steps)
+        
+
+        self.render_2(self.joints[:2])
         
         
         
@@ -132,6 +150,127 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
     def close(self):
        
+        if self.viewer:
+            self.viewer.close()
+            self.viewer = None
+
+
+
+    #Visualization and Pygame
+
+    def __p1(self, q):
+
+        
+        """
+            Position of the first mass
+            Input: 
+                q - joints 
+            Output: 
+                x_1 - position of mass 1 
+        """
+        x = self._l1 * np.sin(q[0])
+        y = -self._l1 * np.cos(q[0])
+
+        
+
+        return np.asarray([x, y])
+    
+    def __p2(self, q):
+        """
+            Position of the second mass
+            Input: 
+                q - joints 
+            Output: 
+                x_2 - position of mass 2
+        """
+        x = self._l1 * np.sin(q[0]) + self._l2 * np.sin(q[0] + q[1])
+        y = -self._l1 * np.cos(q[0]) - self._l2 * np.cos(q[0] + q[1])
+
+        return np.asarray([x, y])
+
+    def render_2(self, q):
+
+        
+        import pygame
+        from pygame import gfxdraw
+
+        if self.screen is None:
+            pygame.init()
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(
+                    (self.SCREEN_DIM, self.SCREEN_DIM)
+                )
+        
+            else: 
+                self.screen = pygame.Surface((self.SCREEN_DIM, self.SCREEN_DIM))
+        if self.clock is None:
+            self.clock = pygame.time.Clock()
+
+        surface = pygame.Surface((self.SCREEN_DIM, self.SCREEN_DIM))
+        surface.fill((255,255, 255))
+        
+
+        bound = self._l1 + self._l2 + 0.2  #default
+        scale = self.SCREEN_DIM/(bound * 4)
+        offset = self.SCREEN_DIM / 2
+
+        p1 = self.__p1(q)*scale
+        p2 = self.__p2(q)*scale
+
+        xys = np.array([[0,0] , p1, p2])
+        thetas = [q[0] - pi / 2, q[0] + q[1] - pi / 2] 
+        link_lengths = [self._l1*scale, self._l2*scale]
+
+        pygame.draw.line(
+            surface,
+            start_pos=(-2.2*scale + offset, 1 * scale + offset),
+            end_pos = (2.2 * scale + offset, 1 * scale + offset),
+            color = (0,0,0),
+        )
+
+        pygame.draw.circle(
+            surface,
+            center = onp.ndarray.tolist(self.target*scale + offset), 
+            radius = 2,
+            color = (255,0,0)
+
+        )
+
+        for ((x,y), th, llen) in zip(xys, thetas, link_lengths):
+            x = x + offset
+            y = y + offset
+            l, r, t, b = 0, llen, 0.1*scale, -0.1*scale
+            coords = [(l,b), (l,t), (r,t), (r,b)]
+            transformed_coords = []
+            for coord in coords:
+                coord = pygame.math.Vector2(coord).rotate_rad(th)
+                coord = (coord[0] + x, coord[1] + y)
+                transformed_coords.append(coord)
+            gfxdraw.aapolygon(surface, transformed_coords, (0, 204, 204))
+            gfxdraw.filled_polygon(surface, transformed_coords, (0, 204, 204))
+
+            gfxdraw.aacircle(surface, int(x), int(y), int(0.1 * scale), (204, 204, 0))
+            gfxdraw.filled_circle(surface, int(x), int(y), int(0.1*scale), (204,204,0))
+        
+        surface = pygame.transform.flip(surface, False, True)
+        self.screen.blit(surface, (0,0))
+
+        if self.render_mode == "human" :
+            pygame.event.pump()
+            self.clock.tick(15) #make this an arg in configs later
+            pygame.display.flip()
+
+        elif self.render_mode == "rgb_array":
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)), axes = (1,0,2)
+            )
+
+    def euclidian_distance(self, a, b):
+        return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+
+    def close(self):
+        # print('close')
         if self.viewer:
             self.viewer.close()
             self.viewer = None

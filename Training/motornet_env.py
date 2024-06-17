@@ -55,8 +55,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         #Motor Net Effector
 
-        self.two_link_arm = mn.effector.Effector(
-            skeleton = mn.skeleton.TwoDofArm(),
+        self.two_link_arm = mn.effector.RigidTendonArm26(
             muscle = mn.muscle.RigidTendonHillMuscleThelen(),
             name = 'Effector',
             n_ministeps = 1, 
@@ -65,41 +64,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
             damping = 0,
             )
         
-        self.two_link_arm.add_muscle(
-            path_fixation_body = [0., 1.],
-            path_coordinates = [[-.15, .03], [0.94, 0.017]],
-            name = 'pectoralis',
-            max_isometric_force = 838,
-            tendon_length = 0.039,
-            optimal_muscle_length = .134,
-            normalized_slack_muscle_length = 1.48)
-        
-        self.two_link_arm.add_muscle(
-            path_fixation_body=[0., 0., 1.],
-            path_coordinates=[[.14, 0.], [.05, -.00], [0.153, 0.]],
-            name='deltoid',
-            max_isometric_force=1207,
-            tendon_length=.066,
-            optimal_muscle_length=.140,
-            normalized_slack_muscle_length=1.52)
-        
-        self.two_link_arm.add_muscle(
-            path_fixation_body=[1., 1., 2.],
-            path_coordinates=[[0.03, 0.], [0.138, -0.019], [-0.04, -0.017]],
-            name='tricepslat',
-            max_isometric_force=1549,
-            tendon_length=.187,
-            optimal_muscle_length=.093,
-            normalized_slack_muscle_length=1.45)
-        
-        self.two_link_arm.add_muscle(
-            path_fixation_body=[0., 2.],
-            path_coordinates=[[-0.052, 0.033], [0.044, 0.001]],
-            name='biceps',
-            max_isometric_force=414,
-            tendon_length=.204,
-            optimal_muscle_length=.137,
-            normalized_slack_muscle_length=1.5)
     
     
         
@@ -142,13 +106,14 @@ class EffectorTwoLinkArmEnv(gym.Env):
         #Integrate and get state
 
         #Calling effector and integrating, default is Euler
-        self.two_link_arm.step(action)    #this is giving a nonetype error which is strange since the effector class initializes states as none, need to look into this more
+        self.two_link_arm.step(action)    #
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip"
         state_dict = self.two_link_arm.states
 
-        #Extract cartestian coords                          #not sure if should extract coords or joint, need to look at shapes and output
-        self.state = np.array(state_dict.get("coordinates"))  #now state in numpy array, fingertip = coords of 'finger'
+        #Extract cartestian coords                          
+        self.state = np.array(state_dict.get("cartesian")) 
+                              #now state in numpy array, fingertip = coords of 'finger'
         self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
         # Get full state
         self.obs_state = np.append(self.target, self.state)

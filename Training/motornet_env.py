@@ -92,9 +92,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([0.55, -0.3]) #[x,y]
+            self.target = onp.array([0.4, 0.4]) #[x,y]
         else :
-            self.target = onp.array([-.25, -.3]) #[x,y]
+            self.target = onp.array([0.0, 0.3]) #[x,y]
         self.two_link_arm.reset()
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)

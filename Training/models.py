@@ -21,28 +21,35 @@ class RNN_MultiRegional(nn.Module):
                 action_dim: output dimension, should be one for lick or no lick
         '''
 
+        # Network Variables
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
         self.action_dim = action_dim
         self.action_scale = action_scale 
         self.action_bias = action_bias
         self.device = device
-        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))]).to(device)
-        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))]).to(device)
+
+        # Masks for individual regions
+        self.alm_mask = torch.cat([torch.zeros(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
+        self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
+        self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
         
         # Identity Matrix of 0.5 Not Trained
-        self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
+        self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
         # Excitatory Connections
-        self.str2m1_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
+        self.str2thal_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
         # Mix of Excitatory and Inhibitory Connections
-        self.m12m1_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
+        self.m12m1_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
         # Excitatory Connections
-        self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
+        self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
+        # Excitatory Connections
+        self.thal2m1_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
 
         nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.str2m1_weight_l0_hh, 0, 0.01)
+        nn.init.uniform_(self.str2thal_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
+        nn.init.uniform_(self.thal2m1_weight_l0_hh, 0, 0.01)
 
         # Implement Necessary Masks
         # Striatum recurrent weights
@@ -51,30 +58,31 @@ class RNN_MultiRegional(nn.Module):
         sparse_mask = torch.where(sparse_matrix != 0, 1, 0)
         self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).to(device)
         self.str2str_fixed = (torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask).to(device)
-        self.str2str_D = -1*torch.eye(int(hid_dim/2)).to(device)
+        self.str2str_D = -1*torch.eye(hid_dim).to(device)
 
-        self.m12m1_D = torch.eye(int(hid_dim/2)).to(device)
-        self.m12m1_D[int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):, 
-                        int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):] *= -1
+        self.m12m1_D = torch.eye(hid_dim).to(device)
+        self.m12m1_D[hid_dim-(int(0.3*hid_dim)):, 
+                        hid_dim-(int(0.3*hid_dim)):] *= -1
         
         # ALM to striatum weights
-        self.m12str_mask_excitatory = torch.ones(size=(int(hid_dim/2), int(hid_dim/2) - int(0.3*(hid_dim/2)))).to(device)
-        self.m12str_mask_inhibitory = torch.zeros(size=(int(hid_dim/2), int(0.3*(hid_dim/2)))).to(device)
+        self.m12str_mask_excitatory = torch.ones(size=(hid_dim, hid_dim - int(0.3*hid_dim))).to(device)
+        self.m12str_mask_inhibitory = torch.zeros(size=(hid_dim, int(0.3*hid_dim))).to(device)
         self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).to(device)
         
+        # STR to Thal masks
+        self.str2thal_D_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), -1 * torch.ones(size=(int(hid_dim/2),))])
+        self.str2thal_D = (torch.eye(hid_dim) * self.str2thal_D_mask).to(device)
+        
         # Input weights
-        self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim)))
+        self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim * 3)))
         nn.init.uniform_(self.inp_weight, 0, 0.1)
 
         # Behavioral output layer
-        self.mean_linear = nn.Linear(hid_dim, action_dim)
-        self.std_linear = nn.Linear(hid_dim, action_dim)
+        self.mean_linear = nn.Linear(hid_dim * 3, action_dim)
+        self.std_linear = nn.Linear(hid_dim * 3, action_dim)
 
         # Time constants for networks (not sure what would be biologically plausible?)
-        t_str = 0.1 * torch.ones(int(hid_dim/2))
-        t_m1_excitatory = 0.1 * torch.ones(int(hid_dim/2) - int(0.3*(hid_dim/2)))
-        t_m1_inhibitory = 0.1 * torch.ones(int(0.3*(hid_dim/2)))
-        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory]).to(device)
+        self.t_const = 0.01
 
     def forward(self, inp, hn, x):
 
@@ -98,12 +106,16 @@ class RNN_MultiRegional(nn.Module):
         str2str_rec = (self.str2str_mask * F.relu(self.str2str_weight_l0_hh) + self.str2str_fixed) @ self.str2str_D
         m12m1_rec = F.relu(self.m12m1_weight_l0_hh) @ self.m12m1_D
         m12str_rec = self.m12str_mask * F.relu(self.m12str_weight_l0_hh)
-        str2m1_rec = F.relu(self.str2m1_weight_l0_hh)
+        str2thal_rec = F.relu(self.str2thal_weight_l0_hh) @ self.str2thal_D
+        thal2m1_rec = F.relu(self.thal2m1_weight_l0_hh)
 
         # Concatenate into single weight matrix
-        W_str = torch.cat([str2str_rec, m12str_rec], dim=1)
-        W_alm = torch.cat([str2m1_rec, m12m1_rec], dim=1)
-        W_rec = torch.cat([W_str, W_alm], dim=0)
+
+                            # STR         Thal        Cortex
+        W_str = torch.cat([str2str_rec, self.zeros, m12str_rec], dim=1)     # STR
+        W_thal = torch.cat([str2thal_rec, self.zeros, self.zeros], dim=1)          # Thal
+        W_m1 = torch.cat([self.zeros, thal2m1_rec, m12m1_rec], dim=1)       # Cortex
+        W_rec = torch.cat([W_str, W_thal, W_m1], dim=0)
 
         # Loop through RNN
         for t in range(size):

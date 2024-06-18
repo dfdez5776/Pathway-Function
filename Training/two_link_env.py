@@ -9,11 +9,11 @@ import time
 import jax.numpy as np
 import jax
 from jax import jacfwd, hessian
+import pygame
+from pygame import gfxdraw
 from functools import partial
 
-
 #Environment class
-
 class TwoLinkArmEnv(gym.Env):
     
     def __init__(self, max_timesteps, render_mode, reward_type = 0):
@@ -42,7 +42,6 @@ class TwoLinkArmEnv(gym.Env):
         # Joint max-min limit
         self.joint_high = [np.pi, np.pi]
         self.joint_low = [-1*i for i in self.joint_high]
-        
 
         #attributes
         self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=onp.float32)
@@ -56,7 +55,6 @@ class TwoLinkArmEnv(gym.Env):
         self.screen = None
         self.clock = None
 
-    
     def __rk4_step(self, x, f, dt, *args):
         
         # one step of runge-kutta integration
@@ -67,10 +65,7 @@ class TwoLinkArmEnv(gym.Env):
         k4 = dt * f(x + k3, *args)
         return x + 1/6 * (k1 + 2 * k2 + 2 * k3 + k4)
     
-    
     def __p1(self, q):
-
-        
         """
             Position of the first mass
             Input: 
@@ -80,8 +75,6 @@ class TwoLinkArmEnv(gym.Env):
         """
         x = self._l1 * np.sin(q[0])
         y = -self._l1 * np.cos(q[0])
-
-        
 
         return np.asarray([x, y])
 
@@ -154,7 +147,7 @@ class TwoLinkArmEnv(gym.Env):
     
     def reward(self):
         hand_pos = self.__p2(self.state[:2])
-        return 1 / 1000**(self.euclidian_distance(hand_pos, self.target))
+        return 1 / (1000**(self.euclidian_distance(hand_pos, self.target)))
     
     def reset(self, episode):
         if episode % 2 == 0 :
@@ -180,8 +173,6 @@ class TwoLinkArmEnv(gym.Env):
     def step(self, episode_steps, action):
         
         action = np.array(action.squeeze())
-        
-        
         # Integrate and get state
         self.state = self.__rk4_step(self.state, self.__f, self.dt, action)
         # Get full state
@@ -198,8 +189,6 @@ class TwoLinkArmEnv(gym.Env):
         return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
     
     def render_2(self, q):
-        import pygame
-        from pygame import gfxdraw
 
         if self.screen is None:
             pygame.init()
@@ -211,12 +200,12 @@ class TwoLinkArmEnv(gym.Env):
         
             else: 
                 self.screen = pygame.Surface((self.SCREEN_DIM, self.SCREEN_DIM))
+
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
         surface = pygame.Surface((self.SCREEN_DIM, self.SCREEN_DIM))
         surface.fill((255,255, 255))
-        
 
         bound = self._l1 + self._l2 + 0.2  #default
         scale = self.SCREEN_DIM/(bound * 2)

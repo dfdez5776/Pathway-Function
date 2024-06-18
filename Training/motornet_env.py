@@ -14,12 +14,10 @@ import numpy as onp
 from numpy import pi
 import time
 import jax.numpy as np
-
-
-
+import pygame
+from pygame import gfxdraw
 
 #Environment class
-
 class EffectorTwoLinkArmEnv(gym.Env):
     
     def __init__(self, max_timesteps, render_mode, reward_type = 0):
@@ -30,7 +28,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.obs_state = None
 
         self.viewer = None 
-       
 
         self.target_radius = 0.1
         self.max_speed = np.pi #rad/sec
@@ -47,7 +44,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.joint_low = [-1*i for i in self.joint_high]
         self.current_hand_pos = onp.array([0.0 , 0.0])
         
-
         #attributes
         self.action_space = spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(2,), dtype=onp.float32)
         self.observation_high = onp.array(self.target_high*3 + [self.max_speed]*2)
@@ -55,7 +51,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.seed() #initialize a seed
 
         #Motor Net Effector
-
         self.two_link_arm = mn.effector.RigidTendonArm26(
             muscle = mn.muscle.RigidTendonHillMuscleThelen(),
             name = 'Effector',
@@ -68,17 +63,11 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self._l1 = self.two_link_arm.skeleton.l1
         self._l2 = self.two_link_arm.skeleton.l2
 
-        
-
         #Visualization in Pygame
         self.render_mode = render_mode
         self.SCREEN_DIM = 200
         self.screen = None
         self.clock = None
-
-        
-    
-    
         
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -86,8 +75,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reward(self):
         hand_pos = self.current_hand_pos
-        
-        
         return 1 / 1000**(self.euclidian_distance(hand_pos, self.target))
     
     def reset(self, episode):
@@ -115,8 +102,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
     def step(self, episode_steps, action):
 
         action = action
-        
-        
         #Integrate and get state
 
         #Calling effector and integrating, default is Euler
@@ -138,11 +123,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
         reward = self.reward()
         # Get done
         done = self.done(episode_steps)
-        
 
         self.render_2(self.joints[:2])
-        
-        
         
         # Return environment variables
         return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
@@ -151,15 +133,11 @@ class EffectorTwoLinkArmEnv(gym.Env):
         return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
     def close(self):
-       
         if self.viewer:
             self.viewer.close()
             self.viewer = None
 
-
-
     #Visualization and Pygame
-
     def __p1(self, q):
 
         
@@ -172,8 +150,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         """
         x = self._l1 * np.cos(q[0]) 
         y = self._l1 * np.sin(q[0]) 
-
-        
 
         return np.asarray([x, y])
     
@@ -192,10 +168,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
     def render_2(self, q):
 
-        
-        import pygame
-        from pygame import gfxdraw
-
         if self.screen is None:
             pygame.init()
             if self.render_mode == "human":
@@ -211,7 +183,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         surface = pygame.Surface((self.SCREEN_DIM, self.SCREEN_DIM))
         surface.fill((255,255, 255))
-        
 
         bound = self._l1 + self._l2 + 0.2  #default
         scale = self.SCREEN_DIM/(bound * 3)

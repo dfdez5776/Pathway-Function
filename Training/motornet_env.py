@@ -45,7 +45,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         # Joint max-min limit
         self.joint_high = [np.pi, np.pi]
         self.joint_low = [-1*i for i in self.joint_high]
-        self.current_hand_pos = None
+        self.current_hand_pos = onp.array([0.0 , 0.0])
         
 
         #attributes
@@ -92,9 +92,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([0.4, 0.4]) #[x,y]
+            self.target = onp.array([-0.5, 0.2]) #[x,y]
         else :
-            self.target = onp.array([0.0, 0.3]) #[x,y]
+            self.target = onp.array([0.0, 0.2]) #[x,y]
         self.two_link_arm.reset()
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)
@@ -126,10 +126,12 @@ class EffectorTwoLinkArmEnv(gym.Env):
         state_dict = self.two_link_arm.states
 
         #Extract cartestian coords          
-        self.joints = onp.array(state_dict.get("joint").squeeze())               
+        self.joints = onp.array(state_dict.get("joint").squeeze())  
+                     
         
         self.state = np.array(state_dict.get("cartesian")) 
         self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
+        
         # Get full state
         self.obs_state = np.append(self.target, self.state)
         # Get reward
@@ -168,8 +170,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
             Output: 
                 x_1 - position of mass 1 
         """
-        x = self._l1 * np.sin(q[0])
-        y = -self._l1 * np.cos(q[0])
+        x = self._l1 * np.cos(q[0]) 
+        y = self._l1 * np.sin(q[0]) 
 
         
 
@@ -212,7 +214,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         
 
         bound = self._l1 + self._l2 + 0.2  #default
-        scale = self.SCREEN_DIM/(bound * 4)
+        scale = self.SCREEN_DIM/(bound * 3)
         offset = self.SCREEN_DIM / 2
 
         p1 = self.__p1(q)*scale
@@ -237,28 +239,34 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         )
 
-        for ((x,y), th, llen) in zip(xys, thetas, link_lengths):
-            x = x + offset
-            y = y + offset
-            l, r, t, b = 0, llen, 0.1*scale, -0.1*scale
-            coords = [(l,b), (l,t), (r,t), (r,b)]
-            transformed_coords = []
-            for coord in coords:
-                coord = pygame.math.Vector2(coord).rotate_rad(th)
-                coord = (coord[0] + x, coord[1] + y)
-                transformed_coords.append(coord)
-            gfxdraw.aapolygon(surface, transformed_coords, (0, 204, 204))
-            gfxdraw.filled_polygon(surface, transformed_coords, (0, 204, 204))
+        finger_x = int(self.current_hand_pos[0]*scale + offset)
+        finger_y = int(self.current_hand_pos[1]*scale + offset)
 
-            gfxdraw.aacircle(surface, int(x), int(y), int(0.1 * scale), (204, 204, 0))
-            gfxdraw.filled_circle(surface, int(x), int(y), int(0.1*scale), (204,204,0))
+        elbow_x = int(p1[0] + offset)
+        elbow_y = int(p1[1] + offset)
+
+        shoulder_x = int(0+offset)
+        shoulder_y = int(0+offset)
+
+        pygame.draw.line(surface, (0, 204, 204), (shoulder_x, shoulder_y), (elbow_x, elbow_y))
+        pygame.draw.line(surface, (0, 204, 204), (elbow_x, elbow_y), (finger_x, finger_y))
+
+        gfxdraw.aacircle(surface, shoulder_x, shoulder_y, int(0.1 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, shoulder_x, shoulder_y, int(0.1*scale), (204,204,0))
+
+
+        gfxdraw.aacircle(surface, elbow_x, elbow_y, int(0.1 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, elbow_x, elbow_y, int(0.1*scale), (204,204,0))
+
+        gfxdraw.aacircle(surface, finger_x, finger_y, int(0.1 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, finger_x, finger_y, int(0.1*scale), (204,204,0))
         
         surface = pygame.transform.flip(surface, False, True)
         self.screen.blit(surface, (0,0))
 
         if self.render_mode == "human" :
             pygame.event.pump()
-            self.clock.tick(15) #make this an arg in configs later
+            self.clock.tick(15) 
             pygame.display.flip()
 
         elif self.render_mode == "rgb_array":

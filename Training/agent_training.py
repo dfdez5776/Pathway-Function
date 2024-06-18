@@ -120,9 +120,8 @@ class On_Policy_Agent():
         ep_trajectory = []
 
         #num_layers specified in the policy model 
-        h_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
-        
-        x_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
+        h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+        x_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
@@ -156,8 +155,8 @@ class On_Policy_Agent():
                 avg_reward.append(episode_reward)
 
                 # reset training conditions
-                h_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
-                x_prev = torch.zeros(size=(1, 1, self.hid_dim), device=self.device)
+                h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+                x_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
                 state = self.env.reset(total_episodes) 
 
                 # resest lists
@@ -235,7 +234,6 @@ class On_Policy_Agent():
 
         lambda_critic = .5
         lambda_actor = .5
-
         
         state = torch.tensor([step[0] for step in tuple], device=self.device).unsqueeze(0)
         action = torch.tensor([step[1] for step in tuple], device=self.device).unsqueeze(0)
@@ -243,10 +241,12 @@ class On_Policy_Agent():
         next_state = torch.tensor([step[3] for step in tuple], device=self.device).unsqueeze(0)
         mask = torch.tensor([step[4] for step in tuple], device=self.device).unsqueeze(1)
 
-        h_update = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
-        x_update = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
+        h_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
+        x_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
 
-        delta = reward + gamma * mask * value(next_state, h_update) - value(state, h_update)
+        h_update_critic = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
+
+        delta = reward + gamma * mask * value(next_state, h_update_critic) - value(state, h_update_critic)
         delta = delta.squeeze(0)[-1]
 
         # Critic Update
@@ -254,7 +254,7 @@ class On_Policy_Agent():
         z_critic_func = {}
         for param in z_critic:
             z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach()
-        critic_forward = value(state, h_update)
+        critic_forward = value(state, h_update_critic)
         critic_forward = torch.sum(critic_forward.squeeze())
         critic_forward.backward()
         # update z_critic and gradients
@@ -267,7 +267,7 @@ class On_Policy_Agent():
         z_actor_func = {}
         for param in z_actor:
             z_actor_func[param] = (gamma * lambda_actor * z_actor[param]).detach()
-        _, log_prob, _, _, _, _, _ = actor.sample(state, h_update, x_update, sampling = False)
+        _, log_prob, _, _, _, _, _ = actor.sample(state, h_update_actor, x_update_actor, sampling = False)
         log_prob = torch.sum(log_prob.squeeze())
         log_prob.backward()
         for name, param in actor.named_parameters():

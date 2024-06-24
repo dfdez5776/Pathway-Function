@@ -63,25 +63,39 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self._l1 = self.two_link_arm.skeleton.l1
         self._l2 = self.two_link_arm.skeleton.l2
 
-        #Visualization in Pygame
+        #Visualizations 
+        #Pygame
         self.render_mode = render_mode
         self.SCREEN_DIM = 200
         self.screen = None
         self.clock = None
-        
+
+        #Reward Plot 
+        self.cum_reward = []
+
+
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
-    def reward(self):
+    def reward(self, t):
         hand_pos = self.current_hand_pos
-        return 1 / 1000**(self.euclidian_distance(hand_pos, self.target))
+        
+        euclidian_distance = self.euclidian_distance(hand_pos, self.target)
+        if t >= self.max_timesteps - 5:
+            reward = -1
+        elif euclidian_distance <= self.target_radius:
+            reward = 1
+        else:
+            reward = 1 / 1000**euclidian_distance
+
+        return reward
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([-0.5, 0.2]) #[x,y]
+            self.target = onp.array([-0.2, 0.5]) #[x,y]
         else :
-            self.target = onp.array([0.0, 0.2]) #[x,y]
+            self.target = onp.array([0.2, 0.5]) #[x,y]
         self.two_link_arm.reset()
         self.state = np.array([0.0]*4)
         self.obs_state = np.append(self.target, self.state)
@@ -114,13 +128,13 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.joints = onp.array(state_dict.get("joint").squeeze())  
                      
         
-        self.state = np.array(state_dict.get("cartesian")) 
+        self.state = np.array(state_dict.get("joint")) 
         self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
         
         # Get full state
         self.obs_state = np.append(self.target, self.state)
         # Get reward
-        reward = self.reward()
+        reward = self.reward(episode_steps)
         # Get done
         done = self.done(episode_steps)
 

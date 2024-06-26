@@ -5,6 +5,7 @@ from collections import namedtuple
 from itertools import count
 import random
 import gym.spaces
+import os 
 
 import torch
 import torch.nn as nn
@@ -12,6 +13,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
+from reward_vis import *
 
 #from utils.gym import get_wrapper_by_name  
 from models import RNN_MultiRegional, RNN  #Changed Actor to RNN_Multiregional(nn.Module), Value to RNN, not sure for Critic
@@ -72,6 +74,7 @@ class On_Policy_Agent():
         '''
         
         state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
+        
         hn = hn.to(self.device)
         x = x.to(self.device)
 
@@ -82,7 +85,7 @@ class On_Policy_Agent():
 
         return action.detach().cpu().numpy(), hn.detach(), x.detach()
     
-    def train(self, max_steps):
+    def train(self, max_steps, load_model_checkpoint):
 
         '''
             Train the agent using one step actor critic
@@ -93,6 +96,13 @@ class On_Policy_Agent():
 
         actor_bg_optimizer = self.optimizer_spec_actor.constructor(actor_bg.parameters(), **self.optimizer_spec_actor.kwargs)
         critic_bg_optimizer = self.optimizer_spec_critic.constructor(critic_bg.parameters(), **self.optimizer_spec_critic.kwargs)
+
+        #option for loading in model
+        if load_model_checkpoint == "yes":
+            checkpoint = torch.load(self.model_save_path)
+            actor_bg.load_state_dict(checkpoint['agent_state_dict'])
+            critic_bg.load_state_dict(checkpoint['critic_state_dict'])
+            iteration = checkpoint['iteration']
 
         z_actor = {}
         z_critic = {}
@@ -105,23 +115,29 @@ class On_Policy_Agent():
         Statistics = {
             "mean_episode_rewards": [],
             "mean_episode_steps": [],
-            "best_mean_episode_rewards": []
+            "best_mean_episode_rewards": [],
+            "all_episode_steps":[],
+            "all_episode_rewards":[]
+
         }
 
         episode_reward = 0
         best_mean_episode_reward = -float("inf")
         episode_steps = 0
         total_episodes = 0
-        avg_reward = [0]
-        avg_steps = [0]
+        all_reward = []
+        all_steps = []
 
         ### GET INITAL STATE + RESET MODEL BY POSE
         state = self.env.reset(0)
         ep_trajectory = []
 
-        #num_layers specified in the policy model 
+            #num_layers specified in the policy model 
         h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
         x_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+
+
+
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
@@ -151,8 +167,8 @@ class On_Policy_Agent():
                 total_episodes += 1
 
                 # Add stats to lists
-                avg_steps.append(episode_steps)
-                avg_reward.append(episode_reward)
+                all_steps.append(episode_steps)
+                all_reward.append(episode_reward)
 
                 # reset training conditions
                 h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
@@ -172,12 +188,12 @@ class On_Policy_Agent():
                     z_critic[name] = torch.zeros_like(params)
 
                 ### 4. Log progress and keep track of statistics
-                if len(avg_reward) > 0:
-                    mean_episode_reward = np.mean(np.array(avg_reward)[-1000:])
-                if len(avg_steps) > 0:
-                    mean_episode_steps = np.mean(np.array(avg_steps)[-1000:])
-                if len(avg_reward) > 10:
-                    if mean_episode_reward > best_mean_episode_reward:
+                if len(all_reward) > 0:
+                    mean_episode_reward = np.mean(np.array(all_reward)[-1000:])
+                if len(all_steps) > 0:
+                    mean_episode_steps = np.mean(np.array(all_steps)[-1000:])
+                if len(all_reward) > 10:
+                    if total_episodes % 500 == 0: #save params every 500 episodes
                         torch.save({
                             'iteration': t,
                             'agent_state_dict': actor_bg.state_dict(),
@@ -191,6 +207,8 @@ class On_Policy_Agent():
                 Statistics["mean_episode_rewards"].append(mean_episode_reward)
                 Statistics["mean_episode_steps"].append(mean_episode_steps)
                 Statistics["best_mean_episode_rewards"].append(best_mean_episode_reward)
+                Statistics["all_episode_rewards"] = all_reward
+                Statistics["all_episode_steps"] = all_steps
 
                 print("Episode %d" % (total_episodes,))
                 print("reward: %f" % episode_reward)
@@ -200,9 +218,11 @@ class On_Policy_Agent():
 
                 if total_episodes % self.log_steps == 0:
                     # Dump statistics to pickle
-                    np.save(f'{self.reward_save_path}.npy', Statistics["mean_episode_rewards"])
-                    np.save(f'{self.steps_save_path}.npy', Statistics["mean_episode_steps"])
+                    np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
+
+                if total_episodes == 10:
+                    visualize_steps_rewards()
                 
                 # reset tracking variables
                 episode_steps = 0
@@ -255,12 +275,13 @@ class On_Policy_Agent():
         for param in z_critic:
             z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach()
         critic_forward = value(state, h_update_critic)
-        critic_forward = torch.sum(critic_forward.squeeze())
+        critic_forward = torch.sum(critic_forward.squeeze()) 
         critic_forward.backward()
         # update z_critic and gradients
         for name, param in value.named_parameters():
             z_critic[name] = (z_critic_func[name] + param.grad).detach()
-            param.grad = -delta.detach().squeeze() * (z_critic_func[name] + param.grad)
+            param.grad += z_critic_func[name]
+            param.grad *= -delta.detach().squeeze()
 
         # Actor Update
         actor_optim.zero_grad()
@@ -272,7 +293,11 @@ class On_Policy_Agent():
         log_prob.backward()
         for name, param in actor.named_parameters():
             z_actor[name] = (z_actor_func[name] + I * param.grad).detach()
-            param.grad = -delta.detach().squeeze() * (z_actor_func[name] + I * param.grad)
+            param.grad *= I
+            param.grad += z_actor_func[name]
+            param.grad *= delta.detach().squeeze()
+        
+        #actor.update_param(z_actor, z_critic)
 
         I = gamma * I
 

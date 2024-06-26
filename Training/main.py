@@ -9,6 +9,7 @@ from two_link_env import TwoLinkArmEnv
 from motornet_env import EffectorTwoLinkArmEnv
 import torch
 import config
+import os
 
 def main():
 
@@ -18,7 +19,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = TwoLinkArmEnv(args.max_timesteps, args.render_mode)
+    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(
@@ -47,8 +48,8 @@ def main():
                                 args.steps_save_path,
                                 args.action_scale,
                                 args.action_bias)
-
-    rl_setup.train(args.max_steps)
+    
+    rl_setup.train(args.max_steps, args.load_model_checkpoint)
 
 if __name__ == '__main__':
     main()

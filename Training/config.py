@@ -103,5 +103,9 @@ def config_parser():
     parser.add_argument('--steps_save_path', 
                         type=str, 
                         help='path to folder and file name to save episode steps (do not put extension .npy)')
-
+    
+    parser.add_argument('--load_model_checkpoint', 
+                        type=str, 
+                        default="no",
+                        help='load in checkpoint or not to continue training')
     return parser

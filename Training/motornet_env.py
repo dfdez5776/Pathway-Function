@@ -70,8 +70,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.screen = None
         self.clock = None
 
-        #Reward Plot 
-        self.cum_reward = []
+        
 
 
     def seed(self, seed=None):
@@ -79,12 +78,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
         return [seed]
     
     def reward(self, t):
-        hand_pos = self.current_hand_pos
-        
-        euclidian_distance = self.euclidian_distance(hand_pos, self.target)
-        if t >= self.max_timesteps - 5:
-            reward = -1
-        elif euclidian_distance <= self.target_radius:
+              
+        euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
+        if euclidian_distance <= self.target_radius:
             reward = 1
         else:
             reward = 1 / 1000**euclidian_distance

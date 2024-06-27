@@ -59,6 +59,7 @@ class RNN_MultiRegional(nn.Module):
         self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).to(device)
         self.str2str_fixed = (torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask).to(device)
         self.str2str_D = -1*torch.eye(hid_dim).to(device)
+        
 
         self.m12m1_D = torch.eye(hid_dim).to(device)
         self.m12m1_D[hid_dim-(int(0.3*hid_dim)):, 
@@ -83,9 +84,15 @@ class RNN_MultiRegional(nn.Module):
 
         # Time constants for networks (not sure what would be biologically plausible?)
         self.t_const = 0.01
+            
+
+    
 
     def forward(self, inp, hn, x):
 
+
+        
+       
         '''
             Forward pass through the model
             
@@ -98,16 +105,19 @@ class RNN_MultiRegional(nn.Module):
         # Saving hidden states
         hn_next = hn.squeeze(0)
         x_next = x.squeeze(0)
+
         size = inp.shape[1]
+        
+        
         new_hs = []
         new_xs = []
 
         # Get full weights for training
-        str2str_rec = (self.str2str_mask * F.relu(self.str2str_weight_l0_hh) + self.str2str_fixed) @ self.str2str_D
-        m12m1_rec = F.relu(self.m12m1_weight_l0_hh) @ self.m12m1_D
-        m12str_rec = self.m12str_mask * F.relu(self.m12str_weight_l0_hh)
-        str2thal_rec = F.relu(self.str2thal_weight_l0_hh) @ self.str2thal_D
-        thal2m1_rec = F.relu(self.thal2m1_weight_l0_hh)
+        str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-6, max_val = 1) + self.str2str_fixed) @ self.str2str_D
+        m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-6, max_val = 1) @ self.m12m1_D
+        m12str_rec = self.m12str_mask * F.hardtanh(self.m12str_weight_l0_hh, min_val=1e-6, max_val = 1)
+        str2thal_rec = F.hardtanh(self.str2thal_weight_l0_hh, min_val=1e-6, max_val = 1) @ self.str2thal_D ##
+        thal2m1_rec = F.hardtanh(self.thal2m1_weight_l0_hh, min_val=1e-6, max_val = 1)
 
         # Concatenate into single weight matrix
 
@@ -116,6 +126,9 @@ class RNN_MultiRegional(nn.Module):
         W_thal = torch.cat([str2thal_rec, self.zeros, self.zeros], dim=1)          # Thal
         W_m1 = torch.cat([self.zeros, thal2m1_rec, m12m1_rec], dim=1)       # Cortex
         W_rec = torch.cat([W_str, W_thal, W_m1], dim=0)
+        #print(W_rec)
+        
+        
 
         # Loop through RNN
         for t in range(size):
@@ -124,8 +137,12 @@ class RNN_MultiRegional(nn.Module):
             new_hs.append(hn_next)
             new_xs.append(x_next)
         
+        
         # Collect hidden states
+        
         rnn_out = torch.stack(new_hs, dim=1)
+        
+        
         x_out = torch.stack(new_xs, dim=1)
         hn_last = rnn_out[:, -1, :].unsqueeze(0)
         x_last = x_out[:, -1, :].unsqueeze(0)
@@ -138,8 +155,15 @@ class RNN_MultiRegional(nn.Module):
     
     def sample(self, state, hn, x, sampling):
 
-        epsilon = 1e-4   
+        epsilon = 1e-4    
 
+        
+       
+        
+
+        
+
+        
         mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
 
         mean_size = mean.size()
@@ -191,6 +215,7 @@ class RNN(nn.Module):
         out = F.relu(self.fc1(x))
         out, _ = self.rnn(out, hn)
         out = self.fc2(out)
+       
 
         return out
         

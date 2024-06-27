@@ -16,14 +16,7 @@ def visualize_steps_rewards():
     reward = np.array(performance_dict.item().get('all_episode_rewards'))
     reward = 100*reward #scaling for vis
 
-    
-
-
-
-    #avg_steps = np.load(r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\two_link_bg_steps.npy')
-    #avg_reward = np.load(r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\two_link_bg_reward.npy')
-    #steps =  np.load(#PATH)
-    #reward = np.load(#PATH)
+    figure_path = r':\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\model_name_steps_rewards_plot.npy'
         
     
     #Make a simple x,y plot
@@ -45,7 +38,7 @@ def visualize_steps_rewards():
 
   
 
-    plt.show()
+    plt.savefig(figure_path)
 
 
 

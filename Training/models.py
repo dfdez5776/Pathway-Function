@@ -83,15 +83,12 @@ class RNN_MultiRegional(nn.Module):
         self.std_linear = nn.Linear(hid_dim * 3, action_dim)
 
         # Time constants for networks (not sure what would be biologically plausible?)
-        self.t_const = 0.01
+        self.t_const = 0.1
             
 
     
 
     def forward(self, inp, hn, x):
-
-
-        
        
         '''
             Forward pass through the model
@@ -113,11 +110,11 @@ class RNN_MultiRegional(nn.Module):
         new_xs = []
 
         # Get full weights for training
-        str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-6, max_val = 1) + self.str2str_fixed) @ self.str2str_D
-        m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-6, max_val = 1) @ self.m12m1_D
-        m12str_rec = self.m12str_mask * F.hardtanh(self.m12str_weight_l0_hh, min_val=1e-6, max_val = 1)
-        str2thal_rec = F.hardtanh(self.str2thal_weight_l0_hh, min_val=1e-6, max_val = 1) @ self.str2thal_D ##
-        thal2m1_rec = F.hardtanh(self.thal2m1_weight_l0_hh, min_val=1e-6, max_val = 1)
+        str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val = 1) + self.str2str_fixed) @ self.str2str_D
+        m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-10, max_val = 1) @ self.m12m1_D
+        m12str_rec = self.m12str_mask * F.hardtanh(self.m12str_weight_l0_hh, min_val=1e-10, max_val = 1)
+        str2thal_rec = F.hardtanh(self.str2thal_weight_l0_hh, min_val=1e-10, max_val = 1) @ self.str2thal_D ##
+        thal2m1_rec = F.hardtanh(self.thal2m1_weight_l0_hh, min_val=1e-10, max_val = 1)
 
         # Concatenate into single weight matrix
 
@@ -132,8 +129,7 @@ class RNN_MultiRegional(nn.Module):
 
         # Loop through RNN
         for t in range(size):
-            x_next = (1 - self.t_const) * x_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight * self.str_mask))
-            hn_next = F.relu(x_next)
+            hn_next = F.relu((1 - self.t_const) * x_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight)))
             new_hs.append(hn_next)
             new_xs.append(x_next)
         
@@ -149,6 +145,7 @@ class RNN_MultiRegional(nn.Module):
 
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.alm_mask)
+    
         std_out = self.std_linear(rnn_out * self.alm_mask)
 
         return mean_out, std_out, rnn_out, hn_last, x_last, x_out
@@ -157,6 +154,15 @@ class RNN_MultiRegional(nn.Module):
 
         epsilon = 1e-4    
 
+
+        
+       
+        
+
+        
+
+        
+        
         
        
         
@@ -165,6 +171,7 @@ class RNN_MultiRegional(nn.Module):
 
         
         mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
+        
 
         mean_size = mean.size()
         log_std_size = log_std.size()
@@ -179,7 +186,6 @@ class RNN_MultiRegional(nn.Module):
         y_t = torch.tanh(x_t)
         
         action = y_t * self.action_scale + self.action_bias
-
         log_prob = normal.log_prob(x_t)
 
         # Enforce the action_bounds

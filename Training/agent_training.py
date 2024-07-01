@@ -72,8 +72,11 @@ class On_Policy_Agent():
         '''
             Selection of action from policy, consistent across training methods
         '''
+       
         
         state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
+
+       
         
         hn = hn.to(self.device)
         x = x.to(self.device)
@@ -111,6 +114,7 @@ class On_Policy_Agent():
             z_actor[name] = torch.zeros_like(params)
         for name, params in critic_bg.named_parameters():
             z_critic[name] = torch.zeros_like(params)
+        
 
         Statistics = {
             "mean_episode_rewards": [],
@@ -141,7 +145,8 @@ class On_Policy_Agent():
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
-
+            
+            
             with torch.no_grad():
                 action, h_current, x_current = self.select_action(actor_bg, state, h_prev, x_prev, evaluate=False)  # Sample action from policy
 
@@ -221,7 +226,7 @@ class On_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes == 10:
+                if total_episodes == 2000:
                     visualize_steps_rewards()
                 
                 # reset tracking variables
@@ -273,15 +278,19 @@ class On_Policy_Agent():
         critic_optim.zero_grad()
         z_critic_func = {}
         for param in z_critic:
-            z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach()
+            z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach() #+ value(state, h_update_critic)
         critic_forward = value(state, h_update_critic)
         critic_forward = torch.sum(critic_forward.squeeze()) 
         critic_forward.backward()
+
+
         # update z_critic and gradients
         for name, param in value.named_parameters():
             z_critic[name] = (z_critic_func[name] + param.grad).detach()
             param.grad += z_critic_func[name]
             param.grad *= -delta.detach().squeeze()
+
+            #w <- w + stepsize_critic* delta * eligibility trace
 
         # Actor Update
         actor_optim.zero_grad()
@@ -295,7 +304,8 @@ class On_Policy_Agent():
             z_actor[name] = (z_actor_func[name] + I * param.grad).detach()
             param.grad *= I
             param.grad += z_actor_func[name]
-            param.grad *= delta.detach().squeeze()
+            param.grad *= -delta.detach().squeeze()
+        #theta <- theta + stepsize_critic* delta * eligibility trace
         
         #actor.update_param(z_actor, z_critic)
 

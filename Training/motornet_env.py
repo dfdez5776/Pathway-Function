@@ -83,7 +83,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if euclidian_distance <= self.target_radius:
             reward = 1
         else:
-            reward = 1 / 1000**euclidian_distance
+            reward = 0
 
         return reward
     

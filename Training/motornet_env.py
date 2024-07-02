@@ -16,13 +16,15 @@ import time
 import jax.numpy as np
 import pygame
 from pygame import gfxdraw
+from effector import Effector , RigidTendonArm26
+
 
 #Environment class
 class EffectorTwoLinkArmEnv(gym.Env):
     
     def __init__(self, max_timesteps, render_mode, reward_type = 0):
 
-        self.target = np.array([0.55, -0.3]) #[x,y]  
+        
         self.state = np.array([0.0]*4) 
         self.joints = np.array([0.0]*4) 
         self.obs_state = None
@@ -51,7 +53,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.seed() #initialize a seed
 
         #Motor Net Effector
-        self.two_link_arm = mn.effector.RigidTendonArm26(
+        self.two_link_arm = RigidTendonArm26(
             muscle = mn.muscle.RigidTendonHillMuscleThelen(),
             name = 'Effector',
             n_ministeps = 1, 
@@ -83,17 +85,18 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if euclidian_distance <= self.target_radius:
             reward = 1
         else:
-            reward = 0
+            reward = 1/1000**euclidian_distance
 
         return reward
     
     def reset(self, episode):
         if episode % 2 == 0 :
-            self.target = onp.array([-0.2, 0.5]) #[x,y]
+            self.target = onp.array([-0.2, 0.55]) #[x,y]
         else :
-            self.target = onp.array([0.2, 0.5]) #[x,y]
+            self.target = onp.array([0.2, 0.55]) #[x,y]
         self.two_link_arm.reset()
-        self.state = np.array([0.0]*4)
+        state_dict = self.two_link_arm.states
+        self.state = np.array(state_dict.get("joint")) #import from effector module instead
         self.obs_state = np.append(self.target, self.state)
         self.render_2(self.joints[:2])
         return onp.array(self.obs_state, dtype = onp.float32)
@@ -232,15 +235,15 @@ class EffectorTwoLinkArmEnv(gym.Env):
         pygame.draw.line(surface, (0, 204, 204), (shoulder_x, shoulder_y), (elbow_x, elbow_y))
         pygame.draw.line(surface, (0, 204, 204), (elbow_x, elbow_y), (finger_x, finger_y))
 
-        gfxdraw.aacircle(surface, shoulder_x, shoulder_y, int(0.1 * scale), (204, 204, 0))
-        gfxdraw.filled_circle(surface, shoulder_x, shoulder_y, int(0.1*scale), (204,204,0))
+        gfxdraw.aacircle(surface, shoulder_x, shoulder_y, int(0.05 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, shoulder_x, shoulder_y, int(0.05*scale), (204,204,0))
 
 
-        gfxdraw.aacircle(surface, elbow_x, elbow_y, int(0.1 * scale), (204, 204, 0))
-        gfxdraw.filled_circle(surface, elbow_x, elbow_y, int(0.1*scale), (204,204,0))
+        gfxdraw.aacircle(surface, elbow_x, elbow_y, int(0.05 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, elbow_x, elbow_y, int(0.05*scale), (204,204,0))
 
-        gfxdraw.aacircle(surface, finger_x, finger_y, int(0.1 * scale), (204, 204, 0))
-        gfxdraw.filled_circle(surface, finger_x, finger_y, int(0.1*scale), (204,204,0))
+        gfxdraw.aacircle(surface, finger_x, finger_y, int(0.05 * scale), (204, 204, 0))
+        gfxdraw.filled_circle(surface, finger_x, finger_y, int(0.05*scale), (204,204,0))
         
         surface = pygame.transform.flip(surface, False, True)
         self.screen.blit(surface, (0,0))

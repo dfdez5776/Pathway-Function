@@ -226,7 +226,7 @@ class On_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes == 2000:
+                if total_episodes == 5000:
                     visualize_steps_rewards()
                 
                 # reset tracking variables
@@ -257,8 +257,8 @@ class On_Policy_Agent():
                 z_actor,
                 hid_dim):
 
-        lambda_critic = .5
-        lambda_actor = .5
+        lambda_critic = .9
+        lambda_actor = .9
         
         state = torch.tensor([step[0] for step in tuple], device=self.device).unsqueeze(0)
         action = torch.tensor([step[1] for step in tuple], device=self.device).unsqueeze(0)
@@ -278,7 +278,7 @@ class On_Policy_Agent():
         critic_optim.zero_grad()
         z_critic_func = {}
         for param in z_critic:
-            z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach() #+ value(state, h_update_critic)
+            z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach() 
         critic_forward = value(state, h_update_critic)
         critic_forward = torch.sum(critic_forward.squeeze()) 
         critic_forward.backward()
@@ -290,7 +290,7 @@ class On_Policy_Agent():
             param.grad += z_critic_func[name]
             param.grad *= -delta.detach().squeeze()
 
-            #w <- w + stepsize_critic* delta * eligibility trace
+            
 
         # Actor Update
         actor_optim.zero_grad()
@@ -305,10 +305,8 @@ class On_Policy_Agent():
             param.grad *= I
             param.grad += z_actor_func[name]
             param.grad *= -delta.detach().squeeze()
-        #theta <- theta + stepsize_critic* delta * eligibility trace
+           
         
-        #actor.update_param(z_actor, z_critic)
-
         I = gamma * I
 
         actor_optim.step()

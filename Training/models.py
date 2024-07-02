@@ -213,7 +213,7 @@ class RNN(nn.Module):
         self.hid_dim = hid_dim
         
         self.fc1 = nn.Linear(inp_dim, hid_dim)
-        self.rnn = nn.RNN(hid_dim, hid_dim, batch_first=True)
+        self.rnn = nn.GRU(hid_dim, hid_dim, batch_first=True)
         self.fc2 = nn.Linear(hid_dim, 1)
     
     def forward(self, x, hn):

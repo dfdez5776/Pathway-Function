@@ -8,7 +8,7 @@ def main():
 def visualize_steps_rewards():  
 
     #load in steps and rewards, trying as a dict
-    performance_dict = np.load(r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\two_link_bg_reward2.npy', allow_pickle=True)
+    performance_dict = np.load(r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\two_link_bg_reward.npy', allow_pickle=True)
 
     avg_steps = np.array(performance_dict.item().get('mean_episode_steps'))
     avg_reward = np.array(performance_dict.item().get('mean_episode_rewards'))
@@ -16,8 +16,8 @@ def visualize_steps_rewards():
     reward = np.array(performance_dict.item().get('all_episode_rewards'))
     reward = 100*reward #scaling for vis
 
-    figure_path = r':\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\model_name_steps_rewards_plot.npy'
-        
+    figure_path = r'training_reports\fixed_motornet_mixed_rewards_plot.png'
+      
     
     #Make a simple x,y plot
     num_episodes = np.size(steps)+1
@@ -26,9 +26,9 @@ def visualize_steps_rewards():
 
 
     figure, subplot = plt.subplots(3)
-    figure.suptitle('Steps and Rewards No Distance')
+    figure.suptitle('Steps and Rewards with Distance')
     subplot[0].plot(x, steps, color = 'red', linewidth = .5, label = 'Steps') 
-    subplot[0].plot(x, reward, color = 'blue', linewidth = .5, label = 'Reward')
+    subplot[0].scatter(x, reward, color = 'blue', linewidth = .5, label = 'Reward')
     subplot[0].set_title('Steps')
     subplot[0].legend(loc='upper right')
     subplot[1].plot(x, avg_steps, color = 'red', linewidth = .5)  
@@ -37,7 +37,7 @@ def visualize_steps_rewards():
     subplot[2].set_title('Average Reward')
 
   
-
+    
     plt.savefig(figure_path)
 
 

@@ -40,7 +40,7 @@ class On_Policy_Agent():
                 frame_skips,
                 model_save_path,
                 reward_save_path,
-                steps_save_path,
+                vis_save_path,
                 action_scale,
                 action_bias):
 
@@ -57,7 +57,7 @@ class On_Policy_Agent():
         self.frame_skips = frame_skips
         self.model_save_path = model_save_path
         self.reward_save_path = reward_save_path
-        self.steps_save_path = steps_save_path
+        self.vis_save_path = vis_save_path
         self.action_scale = action_scale
         self.action_bias = action_bias
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -153,7 +153,8 @@ class On_Policy_Agent():
             ### TRACKING REWARD + EXPERIENCE TUPLE###
             for _ in range(self.frame_skips):
                 next_state, reward, done = self.env.step(episode_steps, action)
-                episode_steps += 1
+                if done == False:
+                    episode_steps += 1
                 episode_reward += reward[0]
                 if done == True:
                     break
@@ -165,6 +166,21 @@ class On_Policy_Agent():
             state = next_state
             h_prev = h_current
             x_prev = x_current 
+
+            I, z_critic, z_actor = self._update(ep_trajectory,
+                                                    actor_bg,
+                                                    critic_bg,
+                                                    actor_bg_optimizer,
+                                                    critic_bg_optimizer,
+                                                    self.gamma,
+                                                    I,
+                                                    z_critic,
+                                                    z_actor,
+                                                    self.hid_dim)
+
+
+
+
 
             ### EARLY TERMINATION OF EPISODE
             if done:
@@ -226,24 +242,14 @@ class On_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes == 5000:
-                    visualize_steps_rewards()
+                if total_episodes % 3000 == 0: #save graphs every 3000 episodes
+                    visualize_steps_rewards(f'{self.reward_save_path}.npy', f'{self.vis_save_path}_tot_average.png')
+                    interval_averages(f'{self.reward_save_path}.npy', f'{self.vis_save_path}_int_average.png')
                 
                 # reset tracking variables
                 episode_steps = 0
                 episode_reward = 0
-
-            if done == False:
-                I, z_critic, z_actor = self._update(ep_trajectory,
-                                                    actor_bg,
-                                                    critic_bg,
-                                                    actor_bg_optimizer,
-                                                    critic_bg_optimizer,
-                                                    self.gamma,
-                                                    I,
-                                                    z_critic,
-                                                    z_actor,
-                                                    self.hid_dim)
+             
     
     def _update(self,
                 tuple, 
@@ -280,7 +286,7 @@ class On_Policy_Agent():
         for param in z_critic:
             z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach() 
         critic_forward = value(state, h_update_critic)
-        critic_forward = torch.sum(critic_forward.squeeze()) 
+        critic_forward = torch.sum(critic_forward.squeeze())  # - mean/std # also clippig
         critic_forward.backward()
 
 
@@ -310,6 +316,7 @@ class On_Policy_Agent():
         I = gamma * I
 
         actor_optim.step()
+    
         critic_optim.step()
 
         return I, z_critic, z_actor

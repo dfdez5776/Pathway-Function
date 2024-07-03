@@ -20,5 +20,5 @@ load_model_checkpoint = "no"
 
 ### MODEL SAVING ###
 model_save_path = "checkpoints/two_link_bg"            
-reward_save_path = "training_reports/two_link_bg_reward"      
-steps_save_path = "training_reports/two_link_bg_steps"        
+reward_save_path = "training_reports/two_link_bg_reward_sparse"      
+vis_save_path = "training_reports/visualizations/sparse_performance"      

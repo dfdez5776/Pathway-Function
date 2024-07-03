@@ -153,22 +153,6 @@ class RNN_MultiRegional(nn.Module):
     def sample(self, state, hn, x, sampling):
 
         epsilon = 1e-4    
-
-
-        
-       
-        
-
-        
-
-        
-        
-        
-       
-        
-
-        
-
         
         mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
         

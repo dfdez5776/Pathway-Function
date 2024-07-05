@@ -121,8 +121,9 @@ class On_Policy_Agent():
             "mean_episode_steps": [],
             "best_mean_episode_rewards": [],
             "all_episode_steps":[],
-            "all_episode_rewards":[]
-
+            "all_episode_rewards":[],
+            "gradient_magnitude": [],
+            "activity_magnitude": []
         }
 
         episode_reward = 0
@@ -266,11 +267,11 @@ class On_Policy_Agent():
         lambda_critic = .9
         lambda_actor = .9
         
-        state = torch.tensor([step[0] for step in tuple], device=self.device).unsqueeze(0)
-        action = torch.tensor([step[1] for step in tuple], device=self.device).unsqueeze(0)
-        reward = torch.tensor([step[2] for step in tuple], device=self.device).unsqueeze(0)
-        next_state = torch.tensor([step[3] for step in tuple], device=self.device).unsqueeze(0)
-        mask = torch.tensor([step[4] for step in tuple], device=self.device).unsqueeze(1)
+        state = torch.tensor(np.array([step[0] for step in tuple]), device=self.device).unsqueeze(0)
+        action = torch.tensor(np.array([step[1] for step in tuple]), device=self.device).unsqueeze(0)
+        reward = torch.tensor(np.array([step[2] for step in tuple]), device=self.device).unsqueeze(0)
+        next_state = torch.tensor(np.array([step[3] for step in tuple]), device=self.device).unsqueeze(0)
+        mask = torch.tensor(np.array([step[4] for step in tuple]), device=self.device).unsqueeze(1)
 
         h_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
         x_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
@@ -286,9 +287,17 @@ class On_Policy_Agent():
         for param in z_critic:
             z_critic_func[param] = (gamma * lambda_critic * z_critic[param]).detach() 
         critic_forward = value(state, h_update_critic)
-        critic_forward = torch.sum(critic_forward.squeeze())  # - mean/std # also clippig
-        critic_forward.backward()
+        
+        if critic_forward.shape[1] > 1:
+            critic_forward = critic_forward.squeeze()
+            mean_normalize = torch.mean(critic_forward)
+            std_normalize = torch.std(critic_forward)
+            critic_forward = (torch.sum(critic_forward) - mean_normalize) / std_normalize 
+        
+        else:
+            critic_forward = critic_forward.squeeze()
 
+        critic_forward.backward()
 
         # update z_critic and gradients
         for name, param in value.named_parameters():
@@ -315,8 +324,10 @@ class On_Policy_Agent():
         
         I = gamma * I
 
+        nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
         actor_optim.step()
     
+        nn.utils.clip_grad_norm_(value.parameters(), 1.0)
         critic_optim.step()
 
         return I, z_critic, z_actor

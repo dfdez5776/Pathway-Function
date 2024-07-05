@@ -45,11 +45,11 @@ class RNN_MultiRegional(nn.Module):
         # Excitatory Connections
         self.thal2m1_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
 
-        nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.str2thal_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.thal2m1_weight_l0_hh, 0, 0.01)
+        nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.001)
+        nn.init.uniform_(self.str2thal_weight_l0_hh, 0, 0.001)
+        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.001)
+        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.001)
+        nn.init.uniform_(self.thal2m1_weight_l0_hh, 0, 0.001)
 
         # Implement Necessary Masks
         # Striatum recurrent weights

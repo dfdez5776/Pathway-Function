@@ -109,20 +109,26 @@ class On_Policy_Agent():
 
         z_actor = {}
         z_critic = {}
+        grad_vis_actor = {}
+        grad_vis_critic = {}
         I = 1
         for name, params in actor_bg.named_parameters():
             z_actor[name] = torch.zeros_like(params)
         for name, params in critic_bg.named_parameters():
             z_critic[name] = torch.zeros_like(params)
+        for name, params in actor_bg.named_parameters():
+            grad_vis_actor[name] = []
+        for name, params in critic_bg.named_parameters():
+            grad_vis_critic[name] = []
         
-
         Statistics = {
             "mean_episode_rewards": [],
             "mean_episode_steps": [],
             "best_mean_episode_rewards": [],
             "all_episode_steps":[],
             "all_episode_rewards":[],
-            "gradient_magnitude": [],
+            "actor_gradients": {},
+            "critic_gradients": {},
             "activity_magnitude": []
         }
 
@@ -132,6 +138,7 @@ class On_Policy_Agent():
         total_episodes = 0
         all_reward = []
         all_steps = []
+      
 
         ### GET INITAL STATE + RESET MODEL BY POSE
         state = self.env.reset(0)
@@ -168,7 +175,9 @@ class On_Policy_Agent():
             h_prev = h_current
             x_prev = x_current 
 
-            I, z_critic, z_actor = self._update(ep_trajectory,
+           
+
+            I, z_critic, z_actor, grad_vis_critic, grad_vis_actor = self._update(ep_trajectory,    #actor_grad, critic_grad
                                                     actor_bg,
                                                     critic_bg,
                                                     actor_bg_optimizer,
@@ -177,8 +186,12 @@ class On_Policy_Agent():
                                                     I,
                                                     z_critic,
                                                     z_actor,
+                                                    grad_vis_critic,
+                                                    grad_vis_actor,
+                                                    done,
                                                     self.hid_dim)
 
+            
 
 
 
@@ -191,6 +204,10 @@ class On_Policy_Agent():
                 # Add stats to lists
                 all_steps.append(episode_steps)
                 all_reward.append(episode_reward)
+
+                activity_norm = float(torch.norm(h_prev))
+                
+                
 
                 # reset training conditions
                 h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
@@ -231,6 +248,11 @@ class On_Policy_Agent():
                 Statistics["best_mean_episode_rewards"].append(best_mean_episode_reward)
                 Statistics["all_episode_rewards"] = all_reward
                 Statistics["all_episode_steps"] = all_steps
+                Statistics["actor_gradients"] = grad_vis_actor
+                Statistics["critic_gradients"] = grad_vis_critic
+                Statistics["activity_magnitude"].append(activity_norm)
+
+                
 
                 print("Episode %d" % (total_episodes,))
                 print("reward: %f" % episode_reward)
@@ -244,8 +266,11 @@ class On_Policy_Agent():
                     print("Saved to %s" % 'training_reports')
 
                 if total_episodes % 3000 == 0: #save graphs every 3000 episodes
-                    visualize_steps_rewards(f'{self.reward_save_path}.npy', f'{self.vis_save_path}_tot_average.png')
-                    interval_averages(f'{self.reward_save_path}.npy', f'{self.vis_save_path}_int_average.png')
+                    average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+
                 
                 # reset tracking variables
                 episode_steps = 0
@@ -262,6 +287,9 @@ class On_Policy_Agent():
                 I, 
                 z_critic, 
                 z_actor,
+                grad_vis_critic,
+                grad_vis_actor,
+                done,
                 hid_dim):
 
         lambda_critic = .9
@@ -303,9 +331,14 @@ class On_Policy_Agent():
         for name, param in value.named_parameters():
             z_critic[name] = (z_critic_func[name] + param.grad).detach()
             param.grad += z_critic_func[name]
-            param.grad *= -delta.detach().squeeze()
+            param.grad *= -delta.detach().squeeze()           
+            if done == True:
+                grad_norm = float(torch.norm(param.grad))
+                grad_vis_critic[name].append(grad_norm)  
 
-            
+
+
+                    
 
         # Actor Update
         actor_optim.zero_grad()
@@ -320,6 +353,14 @@ class On_Policy_Agent():
             param.grad *= I
             param.grad += z_actor_func[name]
             param.grad *= -delta.detach().squeeze()
+            grad_norm = float(torch.norm(param.grad))
+            if done == True:
+                grad_vis_actor[name].append(grad_norm)  
+                
+
+
+
+        
            
         
         I = gamma * I
@@ -330,4 +371,4 @@ class On_Policy_Agent():
         nn.utils.clip_grad_norm_(value.parameters(), 1.0)
         critic_optim.step()
 
-        return I, z_critic, z_actor
+        return I, z_critic, z_actor, grad_vis_critic, grad_vis_actor

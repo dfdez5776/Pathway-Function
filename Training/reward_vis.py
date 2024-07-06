@@ -2,15 +2,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def visualize_steps_rewards(reward_save_path, vis_save_path):  
+def average_reward_vis(reward_save_path, vis_save_path):  
 
     #load in steps and rewards, trying as a dict
-    performance_dict = np.load(reward_save_path, allow_pickle=True)
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
     
-    avg_steps = np.array(performance_dict.item().get('mean_episode_steps'))
-    avg_reward = np.array(performance_dict.item().get('mean_episode_rewards'))
-    steps = np.array(performance_dict.item().get('all_episode_steps'))
-    reward = np.array(performance_dict.item().get('all_episode_rewards'))
+    
+    
+    avg_steps = np.array(data.get('mean_episode_steps'))
+    avg_reward = np.array(data.get('mean_episode_rewards'))
+    steps = np.array(data.get('all_episode_steps'))
+    reward = np.array(data.get('all_episode_rewards'))
 
       
     
@@ -32,6 +36,7 @@ def visualize_steps_rewards(reward_save_path, vis_save_path):
     if __name__ == "__main__":
         plt.show()
     else:
+        vis_save_path = f'{vis_save_path}_average.png'
         plt.savefig(vis_save_path)
         
     
@@ -39,13 +44,18 @@ def visualize_steps_rewards(reward_save_path, vis_save_path):
 
 
 
-def interval_averages(reward_save_path, save_vis_path):
+def interval_reward_vis(reward_save_path, vis_save_path):
+     
+
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
+    
 
 
-
-    performance_dict = np.load(reward_save_path, allow_pickle=True)
-    steps = np.array(performance_dict.item().get('all_episode_steps'))
-    reward_array = np.array(performance_dict.item().get('all_episode_rewards'))
+    
+    steps = np.array(data.get('all_episode_steps'))
+    reward_array = np.array(data.get('all_episode_rewards'))
     num_episodes = np.size(reward_array)
     
 
@@ -66,9 +76,8 @@ def interval_averages(reward_save_path, save_vis_path):
 
     
     x0 = np.size(interval_averages_rew) + 1
-
     x = np.arange(1, x0)
-    print(x)
+    
 
     figure, subplot = plt.subplots(2)
     figure.suptitle('Average Rewards/Steps over Interval ( Sparse)')
@@ -83,17 +92,100 @@ def interval_averages(reward_save_path, save_vis_path):
     if __name__ == "__main__":
         plt.show()
     else:
-        plt.savefig(save_vis_path)
+        vis_save_path = f'{vis_save_path}_interval.png'
+        plt.savefig(vis_save_path)
     
-   
+def gradient_vis(reward_save_path, vis_save_path):
+
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
+    
+    actor_gradients = data["actor_gradients"]
+    critic_gradients = data["critic_gradients"]
+    
+
+    figure, subplot = plt.subplots(2)
+    figure.suptitle('Gradients of Actor and Critic')
+    for key, value in actor_gradients.items():
+        subplot[0].plot(range(1, len(value) + 1), value, '.-', label = key)
+    subplot[0].legend()
+    subplot[0].set_title('Actor Gradients')
+    for key, value in critic_gradients.items():
+        subplot[1].plot(range(1, len(value) + 1), value, '.-', label = key)
+    subplot[1].legend()
+    subplot[1].set_title('Critic Gradients')
+    
+    if __name__ == "__main__":
+        plt.show()
+    else:  
+        vis_save_path = f'{vis_save_path}_gradients.png'
+        plt.savefig(vis_save_path)
+
+
+
+
+def activity_vis(reward_save_path, vis_save_path):
+
+  
+    
+
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
+    
+    
+    activity = data["activity_magnitude"]
+    print(activity)
+    
+    activity_vis = plt.figure()
+    plt.plot(range(1, len(activity)+1), activity)
+    plt.suptitle('Activity')
+
+    
+    if __name__ == "__main__":
+        plt.show()
+    else:
+        vis_save_path = f'{vis_save_path}_activity.png'
+        plt.savefig(vis_save_path)
+
+    
+
+
+    
+
+
 
 #to run on local from saved paths
 def main():
-    reward_save_path = r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\two_link_bg_reward_sparse.npy'
-    vis_save_path0 = r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\visualization_sparse_average.png'
-    vis_save_path1 = r'C:\Users\dfdez\OneDrive\Documents\GitHub\Pathway-Function\Training\training_reports\visualization_sparse.png'
-    visualize_steps_rewards(reward_save_path, vis_save_path0)
-    interval_averages(reward_save_path, vis_save_path1)
+
+
+    #load in data
+
+    reward_save_path = r'training_reports\test.npy'
+   
+    vis_save_path0 = r'visualizations\test0.jpg'
+
+    vis_save_path1 = r'visualizations\test1.jpg'
+    
+    vis_save_path2 = r'visualizations\test2.jpg'
+
+    
+    vis_save_path3 = r'visualizations\test3.jpg'
+
+
+
+
+    rewards = np.load(reward_save_path, allow_pickle=True)
+    data = rewards.item()
+    
+    
+    #visualize_steps_rewards(data, vis_save_path0)
+    #interval_averages(data, vis_save_path1)
+    #gradient_vis(data, vis_save_path2)
+
+    activity_vis(data,  r'training_reports\test.npy')
+
 
 
 if __name__ == "__main__":

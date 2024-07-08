@@ -318,9 +318,7 @@ class On_Policy_Agent():
         
         if critic_forward.shape[1] > 1:
             critic_forward = critic_forward.squeeze()
-            mean_normalize = torch.mean(critic_forward)
-            std_normalize = torch.std(critic_forward)
-            critic_forward = (torch.sum(critic_forward) - mean_normalize) / std_normalize 
+            critic_forward = torch.mean(critic_forward)
         
         else:
             critic_forward = critic_forward.squeeze()
@@ -346,7 +344,7 @@ class On_Policy_Agent():
         for param in z_actor:
             z_actor_func[param] = (gamma * lambda_actor * z_actor[param]).detach()
         _, log_prob, _, _, _, _, _ = actor.sample(state, h_update_actor, x_update_actor, sampling = False)
-        log_prob = torch.sum(log_prob.squeeze())
+        log_prob = torch.mean(log_prob.squeeze())
         log_prob.backward()
         for name, param in actor.named_parameters():
             z_actor[name] = (z_actor_func[name] + I * param.grad).detach()

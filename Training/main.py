@@ -49,7 +49,10 @@ def main():
                                 args.action_scale,
                                 args.action_bias)
     
-    rl_setup.train(args.max_steps, args.load_model_checkpoint)
+    if args.load_model_checkpoint == "test":
+        rl_setup.test(args.max_steps) 
+    else:
+        rl_setup.train(args.max_steps)
 
 if __name__ == '__main__':
     main()

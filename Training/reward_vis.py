@@ -100,6 +100,8 @@ def gradient_vis(reward_save_path, vis_save_path):
     if type(reward_save_path) == str:
         data0 = np.load(reward_save_path, allow_pickle=True)
         data = data0.item()
+    else:
+        data = reward_save_path
     
     actor_gradients = data["actor_gradients"]
     critic_gradients = data["critic_gradients"]
@@ -109,11 +111,11 @@ def gradient_vis(reward_save_path, vis_save_path):
     figure.suptitle('Gradients of Actor and Critic')
     for key, value in actor_gradients.items():
         subplot[0].plot(range(1, len(value) + 1), value, '.-', label = key)
-    subplot[0].legend()
+    subplot[0].legend(fontsize = '4')
     subplot[0].set_title('Actor Gradients')
     for key, value in critic_gradients.items():
         subplot[1].plot(range(1, len(value) + 1), value, '.-', label = key)
-    subplot[1].legend()
+    subplot[1].legend(fontsize = '4')
     subplot[1].set_title('Critic Gradients')
     
     if __name__ == "__main__":
@@ -162,16 +164,9 @@ def main():
 
     #load in data
 
-    reward_save_path = r'training_reports\test.npy'
+    reward_save_path = r'training_reports\07_normalization.npy'
    
-    vis_save_path0 = r'visualizations\test0.jpg'
-
-    vis_save_path1 = r'visualizations\test1.jpg'
-    
-    vis_save_path2 = r'visualizations\test2.jpg'
-
-    
-    vis_save_path3 = r'visualizations\test3.jpg'
+    vis_save_path = r'visualizations\07_normalization_final'
 
 
 
@@ -182,9 +177,9 @@ def main():
     
     #visualize_steps_rewards(data, vis_save_path0)
     #interval_averages(data, vis_save_path1)
-    #gradient_vis(data, vis_save_path2)
+    gradient_vis(data, vis_save_path)
 
-    activity_vis(data,  r'training_reports\test.npy')
+    #activity_vis(data,  r'training_reports\test.npy')
 
 
 

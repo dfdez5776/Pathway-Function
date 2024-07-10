@@ -14,11 +14,11 @@ frame_skips = 1
 action_scale = 0.5
 action_bias = 0.5
 max_steps = 1000000
-render_mode = "rgb_array"
+render_mode = "human"
 save_iter = 10
-load_model_checkpoint = "no"
+load_model_checkpoint = "test"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/05_nantest3_lr"            
-reward_save_path = "training_reports/05_nantest3_lr"      
-vis_save_path = "visualization/05_nantest3_lr"      
+model_save_path = "checkpoints/08_stdclamp"            
+reward_save_path = "training_reports/08_stdclamp"      
+vis_save_path = "visualization/08_stdclamp"      

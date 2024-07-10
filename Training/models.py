@@ -145,9 +145,10 @@ class RNN_MultiRegional(nn.Module):
 
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.alm_mask)
-    
         std_out = self.std_linear(rnn_out * self.alm_mask)
+        std_out = torch.clamp(std_out, min = -5, max = 10)
 
+    
         return mean_out, std_out, rnn_out, hn_last, x_last, x_out
     
     def sample(self, state, hn, x, sampling):

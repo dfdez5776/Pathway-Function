@@ -31,7 +31,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         self.viewer = None 
 
-        self.target_radius = 0.1
+        self.target_radius = 0.08
+
         self.max_speed = np.pi #rad/sec
         self.dt = 0.05 #time step
         self.max_timesteps = max_timesteps
@@ -86,7 +87,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
             reward = 1
         else:
             reward = 0
-
         return reward
     
     def reset(self, episode):
@@ -97,6 +97,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.two_link_arm.reset()
         state_dict = self.two_link_arm.states
         self.state = np.array(state_dict.get("joint")) #import from effector module instead
+        
         self.obs_state = np.append(self.target, self.state)
         self.render_2(self.joints[:2])
         return onp.array(self.obs_state, dtype = onp.float32)

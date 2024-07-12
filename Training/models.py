@@ -76,7 +76,7 @@ class RNN_MultiRegional(nn.Module):
         
         # Input weights
         self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim * 3)))
-        nn.init.uniform_(self.inp_weight, 0, 0.1)
+        nn.init.uniform_(self.inp_weight, -0.1, 0.1)
 
         # Behavioral output layer
         self.mean_linear = nn.Linear(hid_dim * 3, action_dim)
@@ -88,7 +88,7 @@ class RNN_MultiRegional(nn.Module):
 
     
 
-    def forward(self, inp, hn, x):
+    def forward(self, inp, hn):
        
         '''
             Forward pass through the model
@@ -101,13 +101,11 @@ class RNN_MultiRegional(nn.Module):
 
         # Saving hidden states
         hn_next = hn.squeeze(0)
-        x_next = x.squeeze(0)
 
         size = inp.shape[1]
         
         
         new_hs = []
-        new_xs = []
 
         # Get full weights for training
         str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val = 1) + self.str2str_fixed) @ self.str2str_D
@@ -123,25 +121,20 @@ class RNN_MultiRegional(nn.Module):
         W_thal = torch.cat([str2thal_rec, self.zeros, self.zeros], dim=1)          # Thal
         W_m1 = torch.cat([self.zeros, thal2m1_rec, m12m1_rec], dim=1)       # Cortex
         W_rec = torch.cat([W_str, W_thal, W_m1], dim=0)
-        #print(W_rec)
+        
         
         
 
         # Loop through RNN
         for t in range(size):
-            hn_next = F.relu((1 - self.t_const) * x_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight)))
+            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight)))
             new_hs.append(hn_next)
-            new_xs.append(x_next)
-        
         
         # Collect hidden states
         
         rnn_out = torch.stack(new_hs, dim=1)
-        
-        
-        x_out = torch.stack(new_xs, dim=1)
         hn_last = rnn_out[:, -1, :].unsqueeze(0)
-        x_last = x_out[:, -1, :].unsqueeze(0)
+      
 
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.alm_mask)
@@ -149,13 +142,14 @@ class RNN_MultiRegional(nn.Module):
         std_out = torch.clamp(std_out, min = -5, max = 10)
 
     
-        return mean_out, std_out, rnn_out, hn_last, x_last, x_out
+        return mean_out, std_out, rnn_out, hn_last
     
-    def sample(self, state, hn, x, sampling):
+    def sample(self, state, hn, sampling):
+        
 
         epsilon = 1e-4    
         
-        mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
+        mean, log_std, rnn_out, hn = self.forward(state, hn)
         
 
         mean_size = mean.size()
@@ -184,7 +178,7 @@ class RNN_MultiRegional(nn.Module):
             log_prob = log_prob.reshape(log_std_size[0], log_std_size[1], 1) 
             mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
 
-        return action, log_prob, mean, rnn_out, hn, x_last, x_out
+        return action, log_prob, mean, rnn_out, hn
 
     
 

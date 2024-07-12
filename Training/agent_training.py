@@ -69,7 +69,7 @@ class On_Policy_Agent():
         '''
         return (data - min) / (max - min)
 
-    def select_action(self, policy, state, hn, x, evaluate):
+    def select_action(self, policy, state, hn, evaluate):
         '''
             Selection of action from policy, consistent across training methods
         '''
@@ -80,49 +80,72 @@ class On_Policy_Agent():
        
         
         hn = hn.to(self.device)
-        x = x.to(self.device)
+
 
         if evaluate == False: 
-            action, _, _, _, hn, x, _ = policy.sample(state, hn, x, sampling=True)
+            action, _, _, _, hn = policy.sample(state, hn, sampling=True)
         else:
-            _, _, action, _, hn, x, _ = policy.sample(state, hn, x, sampling=True)
+            _, _, action, _, hn = policy.sample(state, hn, sampling=True)
 
-        return action.detach().cpu().numpy(), hn.detach(), x.detach()
+        return action.detach().cpu().numpy(), hn.detach()
     
 
     def test(self, max_steps):
         
-        checkpoint = torch.load(self.model_save_path)
-        actor_bg = RNN_MultiRegional.load_state_dict(checkpoint['agent_state_dict'])
-        critic_bg = RNN.load_state_dict(checkpoint['critic_state_dict'])
+        checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
+        actor_bg = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        actor_bg.load_state_dict(checkpoint['agent_state_dict'])
+        #critic_bg = RNN.load_state_dict(checkpoint['critic_state_dict'])
       
         iteration = checkpoint['iteration']
+        iteration0 = iteration
 
-        state = self.env.reset(0)
-        hn = torch.zeros_like(size=(1 ,1 , self.hid_dim*3), device = self.device)
-        x = torch.zeros_like(size=(1 ,1 , self.hid_dim*3), device = self.device)
-        #reset activities
+
+
+        #Initializing...
+        state = self.env.reset(iteration)
+        h_prev = torch.zeros(size=(1 ,1 , self.hid_dim*3), device = self.device)
+        num_episodes = 0
+        episode_steps = 0 
 
 
         #run episode as usual in train but without the update
-        for t in range(max_steps):
-
-            episode_steps = 0
+        while iteration < max_steps:
+         
+           
+            action, h_current = self.select_action(actor_bg, state, h_prev, evaluate = True)
             
-            action, h_current, x_current = self.select_action(actor_bg, state, hn, x, evaluate = True )
-            next_state, reward, done = self.env.step(episode_steps, action)
-            episode_steps += 1
 
+
+            for _ in range(self.frame_skips):
+
+                next_state, reward, done = self.env.step(episode_steps, action)
+                
+                #call test_vis
+                
+            
+
+            #save activity of direct/indirect pathways for left/right trails 
+                if done == False:
+                    episode_steps += 1
+                if done == True:
+                    break
+            
             state = next_state
             h_prev = h_current
-            x_prev = x_current
+        
 
+            if done == True:
+                #take mean activity 
+                
+                
+                iteration += 1
+                episode_steps = 0
+                state = self.env.reset(iteration)
 
-            
+                h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+                
 
-
-                #put in visualization things
-                #any necessary stats 
 
 
 
@@ -168,6 +191,7 @@ class On_Policy_Agent():
         }
 
         episode_reward = 0
+        sum_ep_rew = []
         best_mean_episode_reward = -float("inf")
         episode_steps = 0
         total_episodes = 0
@@ -181,7 +205,7 @@ class On_Policy_Agent():
 
             #num_layers specified in the policy model 
         h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
-        x_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+      
 
 
 
@@ -191,7 +215,7 @@ class On_Policy_Agent():
             
             
             with torch.no_grad():
-                action, h_current, x_current = self.select_action(actor_bg, state, h_prev, x_prev, evaluate=False)  # Sample action from policy
+                action, h_current = self.select_action(actor_bg, state, h_prev, evaluate=False)  # Sample action from policy
             
             ### TRACKING REWARD + EXPERIENCE TUPLE###
             for _ in range(self.frame_skips):
@@ -199,6 +223,7 @@ class On_Policy_Agent():
                 if done == False:
                     episode_steps += 1
                 episode_reward += reward[0]
+                sum_ep_rew.append(reward[0])
                 if done == True:
                     break
 
@@ -208,7 +233,6 @@ class On_Policy_Agent():
 
             state = next_state
             h_prev = h_current
-            x_prev = x_current 
 
            
 
@@ -233,12 +257,15 @@ class On_Policy_Agent():
 
             ### EARLY TERMINATION OF EPISODE
             if done:
-
+              
                 total_episodes += 1
 
                 # Add stats to lists
                 all_steps.append(episode_steps)
                 all_reward.append(episode_reward)
+
+                
+             
 
                 activity_norm = float(torch.norm(h_prev))
                 
@@ -246,7 +273,6 @@ class On_Policy_Agent():
 
                 # reset training conditions
                 h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
-                x_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
                 state = self.env.reset(total_episodes) 
 
                 # resest lists
@@ -336,7 +362,7 @@ class On_Policy_Agent():
         mask = torch.tensor(np.array([step[4] for step in tuple]), device=self.device).unsqueeze(1)
 
         h_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
-        x_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
+
 
         h_update_critic = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
 
@@ -377,7 +403,7 @@ class On_Policy_Agent():
         z_actor_func = {}
         for param in z_actor:
             z_actor_func[param] = (gamma * lambda_actor * z_actor[param]).detach()
-        _, log_prob, _, _, _, _, _ = actor.sample(state, h_update_actor, x_update_actor, sampling = False)
+        _, log_prob, _, _, _ = actor.sample(state, h_update_actor, sampling = False)
         log_prob = torch.mean(log_prob.squeeze())
         log_prob.backward()
         for name, param in actor.named_parameters():

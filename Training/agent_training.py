@@ -100,6 +100,48 @@ class On_Policy_Agent():
         iteration = checkpoint['iteration']
         iteration0 = iteration
 
+        str_activity = {"str_activityR" : np.empty([1,256]),
+                    "str_activityL" : np.empty([1,256]),
+                    "direct_activityL" : [] ,
+                    "direct_activityR" : [], #change these to np arrays so we can take mean, just not sure dimensions
+                    "indirect_activityL" : [],
+                    "indirect_activityR" : []
+                    }
+        
+        thal_activity = {"thal_activityR" : np.empty([1,256]),
+                     "thal_activityL" : np.empty([1,256]),
+                     #maybe record activity of thal into motor , not sure if all thal neurons input to motor
+                    }
+        
+
+        motor_activity = {"motor_activityR" : np.empty([1,256]),
+                      "motor_activityL" : np.empty([1,256])
+                     }
+        
+        muscle_activation = {"muscle1_activation" : np.empty([1]),
+                         "muscle2_activation" : np.empty([1]),
+                         "muscle3_activation" : np.empty([1]),
+                         "muscle4_activation" : np.empty([1]),
+                         "muscle5_activation" : np.empty([1]),
+                         "muscle6_activation" : np.empty([1]),
+                     }
+      
+        #record activity of each muscle and make a sort of animation (maybe using pygame?)) that shows an anatomical model of the muscles.
+        #or maybe add to existing pygame vis. 
+       
+        
+
+        #indeces for extracting activity
+        str_idx0 = 0
+        str_idx1 = self.hid_dim
+
+        thal_idx0 = str_idx1 
+        thal_idx1 = thal_idx0 + self.hid_dim  
+
+        motor_idx0 = thal_idx1 
+        motor_idx1 = motor_idx0 + self.hid_dim
+
+
 
 
         #Initializing...
@@ -121,7 +163,46 @@ class On_Policy_Agent():
 
                 next_state, reward, done = self.env.step(episode_steps, action)
                 
-                #call test_vis
+                if iteration == iteration0 or iteration == iteration0 + 1:  #activity for 1 episode
+
+                    if iteration % 2 == 0: #left reach, even trials
+                        
+
+                        str_activity0 = np.array(h_current[: ,: , :str_idx1].squeeze(1))
+                        tot_str_activityL = str_activity['str_activityL']
+                        tot_str_activityL = np.append(tot_str_activityL, str_activity0, axis = 0)
+
+                        #direct_activity0 = np.array(h_current[: ,: ,str_idx1/2].squeeze(1)) #add in all the d1 d2 stuff for left and right
+
+
+                        thal_activity0 = np.array(h_current[: ,:, thal_idx0:thal_idx1].squeeze(1))
+                        tot_thal_activityL = thal_activity['thal_activityL']
+                        tot_thal_activityL = np.append(tot_thal_activityL, thal_activity0, axis = 0)
+                    
+                        motor_activity0 = np.array(h_current[: ,:, motor_idx0:].squeeze(1))
+                        tot_motor_activityL = motor_activity['motor_activityL']
+                        tot_motor_activityL = np.append(tot_motor_activityL, motor_activity0, axis = 0)
+                    
+                    else: #Right reach, odd trials
+
+
+                        str_activity0 = np.array(h_current[: ,: , :str_idx1].squeeze(1))
+                        tot_str_activityR = str_activity['str_activityR']
+                        tot_str_activityR = np.append(tot_str_activityR, str_activity0, axis = 0)
+
+                        thal_activity0 = np.array(h_current[: ,:, thal_idx0:thal_idx1].squeeze(1))
+                        tot_thal_activityR = thal_activity['thal_activityR']
+                        tot_thal_activityR = np.append(tot_thal_activityR, thal_activity0, axis = 0)
+                    
+                        motor_activity0 = np.array(h_current[: ,:, motor_idx0:].squeeze(1))
+                        tot_motor_activityR = motor_activity['motor_activityR']
+                        tot_motor_activityR = np.append(tot_motor_activityR, motor_activity0, axis = 0)
+
+
+                        str_activity["str_activityR"] = tot_str_activityR
+                        thal_activity["thal_activityR"] = tot_thal_activityR
+                        motor_activity["motor_activityR"] = tot_motor_activityR
+
                 
             
 
@@ -136,7 +217,18 @@ class On_Policy_Agent():
         
 
             if done == True:
-                #take mean activity 
+
+                if iteration % 2 == 0 and iteration == iteration0 or iteration == iteration0 + 1:
+                    str_activity["str_activityL"] = np.mean(tot_str_activityL, axis = 1)
+                    thal_activity["thal_activityL"] = np.mean(tot_thal_activityL, axis = 1)
+                    motor_activity["motor_activityL"] = np.mean(tot_motor_activityL, axis = 1)
+                
+
+                elif iteration % 2 == 1 and iteration == iteration == iteration0 or iteration == iteration0 + 1: 
+                    str_activity["str_activityR"] = np.mean(tot_str_activityR, axis = 1)
+                    thal_activity["thal_activityR"] = np.mean(tot_thal_activityR, axis = 1)
+                    motor_activity["motor_activityR"] = np.mean(tot_motor_activityR, axis = 1)
+
                 
                 
                 iteration += 1
@@ -150,7 +242,7 @@ class On_Policy_Agent():
 
 
     
-    def train(self, max_steps):
+    def train(self, max_steps, continue_training):
 
         '''
             Train the agent using one step actor critic
@@ -163,6 +255,20 @@ class On_Policy_Agent():
         critic_bg_optimizer = self.optimizer_spec_critic.constructor(critic_bg.parameters(), **self.optimizer_spec_critic.kwargs)
 
         #option for loading in model
+         #add new arg 
+        if continue_training == "yes":
+
+            
+            checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
+
+            #load in models
+            actor_bg.load_state_dict(checkpoint['agent_state_dict'])
+            critic_bg = critic_bg.load_state_dict(checkpoint['critic_state_dict'])
+
+            #load in optimizers 
+            actor_bg_optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
+            critic_bg_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+
         
 
         z_actor = {}
@@ -293,7 +399,7 @@ class On_Policy_Agent():
                 if len(all_steps) > 0:
                     mean_episode_steps = np.mean(np.array(all_steps)[-1000:])
                 if len(all_reward) > 10:
-                    if total_episodes % 500 == 0: #save params every 500 episodes
+                    if mean_episode_reward >= best_mean_episode_reward: #save model if improving
                         torch.save({
                             'iteration': t,
                             'agent_state_dict': actor_bg.state_dict(),

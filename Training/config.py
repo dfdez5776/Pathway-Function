@@ -108,4 +108,9 @@ def config_parser():
                         type=str, 
                         default="no",
                         help='load in checkpoint or not to continue training')
+    
+    parser.add_argument('--continue_training', 
+                        type=str, 
+                        default="no", 
+                        help='option to continue training a previous model')
     return parser

@@ -14,11 +14,12 @@ frame_skips = 1
 action_scale = 0.5
 action_bias = 0.5
 max_steps = 1000000
-render_mode = "rgb_array"
+render_mode = "human"
 save_iter = 10
-load_model_checkpoint = "train"
+load_model_checkpoint = "test"
+continue_training = "yes"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/x_test"            
+model_save_path = "checkpoints/07_normalization"            
 reward_save_path = "training_reports/x_test"      
 vis_save_path = "visualization/x_test"      

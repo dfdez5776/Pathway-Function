@@ -52,7 +52,7 @@ def main():
     if args.load_model_checkpoint == "test":
         rl_setup.test(args.max_steps) 
     else:
-        rl_setup.train(args.max_steps)
+        rl_setup.train(args.max_steps, args.continue_training)
 
 if __name__ == '__main__':
     main()

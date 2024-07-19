@@ -151,6 +151,12 @@ def activity_vis(reward_save_path, vis_save_path):
         vis_save_path = f'{vis_save_path}_activity.png'
         plt.savefig(vis_save_path)
 
+
+def test_PSTH(str_activity, thal_activity, motor_activity, length_Rtrial, length_Ltrial): 
+
+
+    plt.plot( str_activity["indirect_activityL"])
+    plt.show()
     
 
 

@@ -31,7 +31,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         self.viewer = None 
 
-        self.target_radius = 0.08
+        self.target_radius = 0.1
 
         self.max_speed = np.pi #rad/sec
         self.dt = 0.05 #time step

@@ -4,7 +4,7 @@ import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
 
-from agent_training import OptimizerSpec, On_Policy_Agent
+from agent_training import OptimizerSpec, On_Policy_Agent, Off_Policy_Agent
 from two_link_env import TwoLinkArmEnv
 from motornet_env import EffectorTwoLinkArmEnv
 import torch
@@ -31,8 +31,37 @@ def main():
         constructor=optim.AdamW,
         kwargs=dict(lr=args.lr),
     )
+    if args.algorithm == "SAC":
+        rl_setup = Off_Policy_Agent(args.policy_replay_size,  
+                                    args.policy_batch_size, 
+                                    args.policy_batch_iters,
+                                    args.lr,
+                                    args.alpha,
+                                    env, 
+                                    args.seed,
+                                    args.inp_dim,
+                                    args.hid_dim,
+                                    args.action_dim,
+                                    optimizer_spec_actor,
+                                    optimizer_spec_critic,
+                                    args.tau,  
+                                    args.gamma,
+                                    args.save_iter,
+                                    args.log_steps,
+                                    args.frame_skips,
+                                    args.model_save_path,
+                                    args.reward_save_path,
+                                    args.vis_save_path,
+                                    args.action_scale,
+                                    args.action_bias,
+                                    args.automatic_entropy_tuning 
 
-    rl_setup = On_Policy_Agent(env,
+
+
+
+        )
+    else:
+        rl_setup = On_Policy_Agent(env,
                                 args.seed,
                                 args.inp_dim,
                                 args.hid_dim,
@@ -47,7 +76,8 @@ def main():
                                 args.reward_save_path,
                                 args.vis_save_path,
                                 args.action_scale,
-                                args.action_bias)
+                                args.action_bias,
+) ##
     
     if args.load_model_checkpoint == "test":
         rl_setup.test(args.max_steps) 

@@ -8,9 +8,15 @@ import math
 
 ######### MULTIREGIONAL MODEL ##########
 
-class RNN_MultiRegional(nn.Module):
+def weights_init_(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform_(m.weight, gain = 1)
+        torch.nn.init.constant_(m.bias, 0)
+
+
+class RNN_MultiRegional_SAC(nn.Module):
     def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
-        super(RNN_MultiRegional, self).__init__()
+        super(RNN_MultiRegional_SAC, self).__init__()
         
         '''
             Multi-Regional RNN model, implements interaction between striatum and ALM
@@ -88,7 +94,7 @@ class RNN_MultiRegional(nn.Module):
 
     
 
-    def forward(self, inp, hn):
+    def forward(self, inp, hn, sampling, len_seq = None):
        
         '''
             Forward pass through the model
@@ -98,14 +104,19 @@ class RNN_MultiRegional(nn.Module):
                 hn: the hidden state of the model
                 x: hidden state before activation
         '''
-
+        
         # Saving hidden states
-        hn_next = hn.squeeze(0)      
-
-        size = inp.shape[1]
+       
+        hn_next = hn.squeeze(0)
+        
+        if sampling == True:
+            size = inp.shape[1]
         
         
         new_hs = []
+        #for batching
+        rnn_out = []
+        batch_hn_out = []
 
         # Get full weights for training
         str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val = 1) + self.str2str_fixed) @ self.str2str_D
@@ -121,51 +132,83 @@ class RNN_MultiRegional(nn.Module):
         W_thal = torch.cat([str2thal_rec, self.zeros, self.zeros], dim=1)          # Thal
         W_m1 = torch.cat([self.zeros, thal2m1_rec, m12m1_rec], dim=1)       # Cortex
         W_rec = torch.cat([W_str, W_thal, W_m1], dim=0)
-        
-        
-        
+ 
 
-        # Loop through RNN
-        for t in range(size):
-            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight)))
-           
-            new_hs.append(hn_next)
-            
-            
-            
-            
         
-        # Collect hidden states
-        
-        rnn_out = torch.stack(new_hs, dim=1)
-        
-        hn_last = rnn_out[:, -1, :].unsqueeze(0)
-        
-      
+        if sampling == False:
+            #assert len_seq != None, "Proved the len_seq"
+            #inp = pack_padded_sequence(inp, len_seq, batch_first = True, enforce_sorted = False)
 
+            #pass from agent training, I just haven't done it yet
+            batch_size = 8
+            for i in range(batch_size): 
+                state_batch = inp[i]
+                for j in range(len_seq[i]):
+                    hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const*((W_rec @ hn_next.T).T + (state_batch[i, :]@self.inp_weight)))
+                    new_hs.append(hn_next)
+                rnn_out0 = torch.stack(new_hs, dim = 1).squeeze()
+                rnn_out.append(rnn_out0)
+                hn_last = rnn_out0[-1, :]
+                batch_hn_out.append(hn_last)
+                new_hs = []
+
+            #pad batch outputs
+            rnn_out = torch.FloatTensor(pad_sequence(rnn_out, batch_first = True)).to(self.device)
+            
+                                 
+                
+            
+
+        if sampling == True:
+            for t in range(size):
+                hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:,t,:] @ self.inp_weight)))
+                new_hs.append(hn_next)     
+                rnn_out = torch.stack(new_hs, dim = 1)  
+                hn_last = rnn_out[:, -1, :].unsqueeze(0)
+       
+     
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.alm_mask)
         std_out = self.std_linear(rnn_out * self.alm_mask)
         std_out = torch.clamp(std_out, min = -5, max = 10)
 
     
-        return mean_out, std_out, rnn_out, hn_last
+        return mean_out, std_out, hn_last, rnn_out
     
-    def sample(self, state, hn, sampling):
+    def sample(self, state, h_activity, sampling, len_seq):
         
-
         epsilon = 1e-4    
         
-        mean, log_std, rnn_out, hn = self.forward(state, hn)
+        mean, log_std, h_current, x = self.forward(state, h_activity, sampling, len_seq) #done
         
 
-        mean_size = mean.size()
-        log_std_size = log_std.size()
+        if sampling == False:
+            
+            assert mean.size()[1] == log_std.size()[1], "There is a mismatch between mean and sigma S1_max"
+            
+            sl_max = mean.size()[1] 
+            with torch.no_grad():
+                for seq_idx, k in enumerate(len_seq):
+                    for j in range(1, sl_max + 1):
+                        if j <= k:
+                            if seq_idx == 0 and j == 1:
+                                mask_seq = torch.tensor([True], dtype = bool)
+                            else:
+                                mask_seq = torch.cat((mask_seq, torch.tensor([True])), dim = 0)
+                        else:
+                            mask_seq = torch.cat((mask_seq, torch.tensor([False])), dim = 0)
 
-        mean = mean.reshape(-1, mean.size()[-1])
-        log_std = log_std.reshape(-1, log_std.size()[-1])
+            mean = mean.reshape(-1, mean.size()[-1])[mask_seq]
+            log_std = log_std.reshape(-1, log_std.size()[-1])[mask_seq]                   
+
+        if sampling == True:
+
+            mask_seq = [] 
+        
 
         std = log_std.exp()
+
+
         normal = Normal(mean, std)
         x_t = normal.rsample()
 
@@ -180,34 +223,47 @@ class RNN_MultiRegional(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
 
-        if sampling == False:
-            action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
-            log_prob = log_prob.reshape(log_std_size[0], log_std_size[1], 1) 
-            mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
+        
+        
 
-        return action, log_prob, mean, rnn_out, hn
+        return action, log_prob, mean, h_current, mask_seq, x
 
     
 
 ########## SINGLE RNN MODEL ##########
 
-class RNN(nn.Module):
-    def __init__(self, inp_dim, hid_dim):
-        super(RNN, self).__init__()
+class RNN_SAC(nn.Module):
+    def __init__(self, inp_dim, action_dim, hid_dim):
+        super(RNN_SAC, self).__init__()
 
-        self.inp_dim = inp_dim
-        self.hid_dim = hid_dim
-        
-        self.fc1 = nn.Linear(inp_dim, hid_dim)
-        self.rnn = nn.GRU(hid_dim, hid_dim, batch_first=True)
-        self.fc2 = nn.Linear(hid_dim, 1)
+
+        #Q1
+        self.crt11 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.crt12 = nn.Linear(hid_dim, hid_dim)
+        self.crt13 = nn.Linear(hid_dim, 1)
+
+        #Q2
+        self.crt21 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.crt22 = nn.Linear(hid_dim, hid_dim)
+        self.crt23 = nn.Linear(hid_dim, 1)
+
+        self.apply(weights_init_)
     
-    def forward(self, x, hn):
+    def forward(self, state, action):
+       
         
-        out = F.relu(self.fc1(x))
-        out, _ = self.rnn(out, hn)
-        out = self.fc2(out)
+
+        xu = torch.cat([state, action], 1)
+
+        x1 = F.relu(self.crt11(xu))
+        x1 = F.relu(self.crt12(x1))
+        x1 = self.crt13(x1)
+
+        x2 = F.relu(self.crt21(xu))
+        x2 = F.relu(self.crt22(x2))
+        x2 = self.crt23(x2)
+        
        
 
-        return out
+        return x1, x2
         

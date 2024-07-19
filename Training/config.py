@@ -113,4 +113,33 @@ def config_parser():
                         type=str, 
                         default="no", 
                         help='option to continue training a previous model')
+    
+    parser.add_argument('--algorithm', 
+                        type=str, 
+                        default="SAC", 
+                        help='which algorithm to use. SAC or Actor-Critic w Eligibility trace')
+    parser.add_argument('--policy_replay_size', 
+                        type=int, 
+                        default=4000, 
+                        help='size of replay buffer for SAC')
+    parser.add_argument('--policy_batch_size', 
+                        type=int, 
+                        default=8, 
+                        help='Size of sample from replay memory to update')
+    parser.add_argument('--policy_batch_iters', 
+                        type=int, 
+                        default=1, 
+                        help='how many time to repeat replay step')
+    parser.add_argument('--tau', 
+                        type=float, 
+                        default=0.005, 
+                        help='constant for critic update')
+    parser.add_argument('--automatic_entropy_tuning', 
+                        type=bool, 
+                        default=True, 
+                        help='maximize entropy and include loss for it')
+    parser.add_argument('--alpha', 
+                        type= float, 
+                        default= 0.2, 
+                        help='SAC critic loss constant')
     return parser

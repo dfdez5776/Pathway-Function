@@ -845,7 +845,6 @@ class Off_Policy_Agent():
 
 
     def update(self):
-        print("updating")
         #Sample from replay memory
 
         
@@ -859,7 +858,7 @@ class Off_Policy_Agent():
         action_batch = torch.FloatTensor(action_batch).to(self.device)
         reward_batch = torch.FloatTensor(reward_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
-        done_batch = torch.FloatTensor(done_batch).to(self.device)
+        done_batch = torch.FloatTensor(done_batch).to(self.device).unsqueeze(1)
         h_current_batch = torch.FloatTensor(h_current_batch).to(self.device).permute(1, 0, 2)
         
 
@@ -869,8 +868,9 @@ class Off_Policy_Agent():
         with torch.no_grad():
             next_action, next_log_prob, _, _, _, _ = self.actor.sample(next_state_batch.unsqueeze(1), h_current_batch, sampling=True, len_seq = None)
             qf1_next_target, qf2_next_target = self.critic_target(next_action.squeeze(1), next_state_batch)
-            min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_log_prob
-            next_q_value = reward_batch + done_batch*self.gamma * (min_qf_next_target)
+            min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - (self.alpha * next_log_prob).squeeze(2)
+            next_q_value = reward_batch + done_batch * self.gamma * (min_qf_next_target)
+           
 
         #Calculate Critic Loss
         qf1, qf2 = self.critic(state_batch, action_batch.squeeze(1))

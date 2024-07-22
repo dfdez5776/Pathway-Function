@@ -314,7 +314,7 @@ class On_Policy_Agent():
             checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
 
             #load in models
-            actor_bg.load_state_dict(checkpoint['agent_state_dict'])
+            actor_bg = actor_bg.load_state_dict(checkpoint['agent_state_dict'])
             critic_bg = critic_bg.load_state_dict(checkpoint['critic_state_dict'])
 
             #load in optimizers 
@@ -487,8 +487,8 @@ class On_Policy_Agent():
                 if total_episodes % 3000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
                 
                 # reset tracking variables
@@ -613,7 +613,8 @@ class Off_Policy_Agent():
                  vis_save_path,
                  action_scale,
                  action_bias,
-                 automatic_entropy_tuning):
+                 automatic_entropy_tuning,
+                 continue_training):
         
 
         self.policy_replay_size = policy_replay_size
@@ -650,21 +651,33 @@ class Off_Policy_Agent():
         self.critic = RNN_SAC(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
         self.critic_target = RNN_SAC(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
       
-        
-
         #Optimizers
 
         self.actor_optimizer = self.optimizer_spec_actor.constructor(self.actor.parameters(), **self.optimizer_spec_actor.kwargs)
         self.critic_optimizer = self.optimizer_spec_actor.constructor(self.critic.parameters(), **self.optimizer_spec_critic.kwargs)
 
-        actor = self.actor
+        if continue_training == "yes":
 
-        critic = self.critic
-        critic_target = self.critic_target
-        self.hard_update(critic_target, critic)
+            
+            checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
+
+            #load in models
+            self.actor.load_state_dict(checkpoint['agent_state_dict'])
+            self.critic.load_state_dict(checkpoint['critic_state_dict'])
+            self.critic_target.load_state_dict(checkpoint['critic_target_state_dict'])
+
+            #load in optimizers 
+            self.actor_optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+
+
+
+        self.hard_update(self.critic_target, self.critic)
 
 
         self.automatic_entropy_tuning = automatic_entropy_tuning
+
+
         #target entropy = - dim(action)
         if automatic_entropy_tuning:
             self.target_entropy = -torch.prod(torch.Tensor(self.action_dim).to(self.device)).item()
@@ -740,6 +753,12 @@ class Off_Policy_Agent():
         #Episode Training Loop
         for t in range(max_steps):
 
+            if len(self.policy_memory.buffer) > self.policy_batch_size:
+                for _ in range(self.policy_batch_iters):
+                    critic_loss, critic_2_loss, policy_loss = self.update() #grad_vis_actor, grad_vis_critic
+                    critic_losses.append(critic_loss)
+                    actor_losses.append(policy_loss)
+
     
 
             #its updating at every time step, need to change structure of loop so it updates at the beginning of every episode 
@@ -760,7 +779,7 @@ class Off_Policy_Agent():
                 
             mask = 1.0 if episode_steps == self.env.max_timesteps else float(not done)
 
-            ep_trajectory.append((state, action, reward, next_state, mask, h_current))
+            ep_trajectory.append((state, action, reward, next_state, mask, h_current.cpu().numpy()))
             
 
             state = next_state
@@ -777,12 +796,6 @@ class Off_Policy_Agent():
                 #push to replay and update
                 self.policy_memory.push(ep_trajectory)
 
-                if len(self.policy_memory.buffer) > self.policy_batch_size:
-                    for _ in range(self.policy_batch_iters):
-                        critic_loss, critic_2_loss, policy_loss = self.update() #grad_vis_actor, grad_vis_critic
-                        critic_losses.append(critic_loss)
-                        actor_losses.append(policy_loss)
-
                 ### 4. Log progress and keep track of statistics
                 if len(all_reward) > 0:
                     mean_episode_reward = np.mean(np.array(all_reward)[-1000:])
@@ -794,6 +807,7 @@ class Off_Policy_Agent():
                             'iteration': t,
                             'agent_state_dict': self.actor.state_dict(),
                             'critic_state_dict': self.critic.state_dict(),
+                            'critic_target_state_dict': self.critic_target.state_dict(),
                             'agent_optimizer_state_dict': self.actor_optimizer.state_dict(),
                             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
                         }, self.model_save_path + '.pth')
@@ -825,8 +839,8 @@ class Off_Policy_Agent():
                 if total_episodes % 3000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
 
                 #Reset lists and activity
@@ -848,9 +862,6 @@ class Off_Policy_Agent():
         #Sample from replay memory
 
         
-        
-
-
         state_batch, action_batch, reward_batch, next_state_batch, done_batch, h_current_batch, policy_state_batch = self.policy_memory.sample(self.policy_batch_size)
 
         #Converting to tensors...
@@ -860,6 +871,7 @@ class Off_Policy_Agent():
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
         done_batch = torch.FloatTensor(done_batch).to(self.device).unsqueeze(1)
         h_current_batch = torch.FloatTensor(h_current_batch).to(self.device).permute(1, 0, 2)
+       
         
 
         h0 = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
@@ -888,10 +900,11 @@ class Off_Policy_Agent():
         
         
         h0 = torch.zeros(size = (1, 1, self.hid_dim*3)).to(self.device)
+        policy_state_batch = pad_sequence(policy_state_batch, batch_first = True).to(self.device)
         pi_action_batch, log_prob_batch, _, _, mask_seq, _ = self.actor.sample(policy_state_batch, h0, sampling = False, len_seq = len_seq)
 
         #Mask Policy State Batch 
-        policy_state_batch = torch.FloatTensor(pad_sequence(policy_state_batch, batch_first = True)).to(self.device)
+
         policy_state_batch_pi = policy_state_batch.reshape(-1, policy_state_batch.size()[-1])[mask_seq]
 
         #Get Value of Current State and Action Pairs

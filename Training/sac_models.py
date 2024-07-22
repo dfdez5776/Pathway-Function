@@ -109,8 +109,8 @@ class RNN_MultiRegional_SAC(nn.Module):
        
         hn_next = hn.squeeze(0)
         
-        if sampling == True:
-            size = inp.shape[1]
+      
+        size = inp.shape[1]
         
         
         new_hs = []
@@ -136,32 +136,24 @@ class RNN_MultiRegional_SAC(nn.Module):
 
         
         if sampling == False:
-            #assert len_seq != None, "Proved the len_seq"
-            #inp = pack_padded_sequence(inp, len_seq, batch_first = True, enforce_sorted = False)
+           
 
-            #pass from agent training, I just haven't done it yet
-            batch_size = 8
-            for i in range(batch_size): 
-                state_batch = inp[i]
-                for j in range(len_seq[i]):
-                    hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const*((W_rec @ hn_next.T).T + (state_batch[i, :]@self.inp_weight)))
-                    new_hs.append(hn_next)
-                rnn_out0 = torch.stack(new_hs, dim = 1).squeeze()
-                rnn_out.append(rnn_out0)
-                hn_last = rnn_out0[-1, :]
-                batch_hn_out.append(hn_last)
-                new_hs = []
-
-            #pad batch outputs
-            rnn_out = torch.FloatTensor(pad_sequence(rnn_out, batch_first = True)).to(self.device)
-            
+            #pass from agent trai
+                
+            for i in range(size):
+                    
+                hn_next = F.relu(((1 - self.t_const) * hn_next + self.t_const*(W_rec @ hn_next.T).T + (inp[:, i,:]@self.inp_weight)))
+                new_hs.append(hn_next)
+            rnn_out = torch.stack(new_hs, dim = 1)
+            hn_last = rnn_out[:, -1, :].unsqueeze(0)
+                          
                                  
                 
             
 
         if sampling == True:
             for t in range(size):
-                hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:,t,:] @ self.inp_weight)))
+                hn_next = F.relu(((1 - self.t_const) * hn_next + self.t_const*(W_rec @ hn_next.T).T + (inp[:,t,:] @ self.inp_weight)))
                 new_hs.append(hn_next)     
                 rnn_out = torch.stack(new_hs, dim = 1)  
                 hn_last = rnn_out[:, -1, :].unsqueeze(0)

@@ -54,12 +54,8 @@ def main():
                                     args.vis_save_path,
                                     args.action_scale,
                                     args.action_bias,
-                                    args.automatic_entropy_tuning 
-
-
-
-
-        )
+                                    args.automatic_entropy_tuning,
+                                    args.continue_training )
     else:
         rl_setup = On_Policy_Agent(env,
                                 args.seed,

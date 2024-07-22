@@ -31,6 +31,7 @@ def main():
         constructor=optim.AdamW,
         kwargs=dict(lr=args.lr),
     )
+
     if args.algorithm == "SAC":
         rl_setup = Off_Policy_Agent(args.policy_replay_size,  
                                     args.policy_batch_size, 
@@ -72,8 +73,7 @@ def main():
                                 args.reward_save_path,
                                 args.vis_save_path,
                                 args.action_scale,
-                                args.action_bias,
-) ##
+                                args.action_bias)
     
     if args.load_model_checkpoint == "test":
         rl_setup.test(args.max_steps) 

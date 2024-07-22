@@ -16,16 +16,26 @@ class PolicyReplayBuffer:
             self.buffer.append(None)
         self.buffer[self.position] = state
         self.position = (self.position + 1) % self.capacity 
-
+    
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        batch_list = list(chain(*batch))
-        state, action, reward, next_state, done, h_current = map(np.stack, zip(*batch_list))
-        policy_state_batch = [[list(element)[0] for element in sample]for sample in batch]
-        policy_state_batch = list(map(torch.FloatTensor, policy_state_batch))
-        
 
-        return state, action, reward, next_state, done, h_current, policy_state_batch
-    
+        state_batch = [[list(element)[0] for element in sample]for sample in batch]
+        state_batch = list(map(torch.FloatTensor, state_batch))
+
+        action_batch = [[list(element)[1] for element in sample]for sample in batch]
+        action_batch = list(map(torch.FloatTensor, action_batch))
+
+        reward_batch = [[list(element)[2] for element in sample]for sample in batch]
+        reward_batch = list(map(torch.FloatTensor, reward_batch))
+
+        next_state_batch = [[list(element)[3] for element in sample]for sample in batch]
+        next_state_batch = list(map(torch.FloatTensor, next_state_batch))
+
+        done_batch = [[list(element)[4] for element in sample]for sample in batch]
+        done_batch = list(map(torch.FloatTensor, done_batch))
+
+        return state_batch, action_batch, reward_batch, next_state_batch, done_batch
+
     def __len__(self):
         return len(self.buffer)

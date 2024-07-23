@@ -80,9 +80,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
-    def reward(self, episode_steps, total_episodes): ##pass in episode
-
-    def reward(self, t):
+    def reward(self, episode_steps, total_episodes):
               
         reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
@@ -136,10 +134,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.activation = onp.array(state_dict.get("activation"))
 
         if self.task_version == "delay_task":
-            print("targets pos shapt", self.targets_pos.shape)
-            print("joints shape", self.joints.shape)
-
-            print("activation shape", self.activation.shape)
+           
             self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
 
         if self.task_version == "original":

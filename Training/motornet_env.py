@@ -22,10 +22,10 @@ from effector import Effector , RigidTendonArm26
 #Environment class
 class EffectorTwoLinkArmEnv(gym.Env):
     
-    def __init__(self, max_timesteps, render_mode, reward_type = 0):
+    def __init__(self, max_timesteps, render_mode, task_version):
 
         
-        self.state = np.array([0.0]*4) 
+        self.state = np.array([0.0]*12) 
         self.joints = np.array([0.0]*4) 
         self.obs_state = None
 
@@ -37,7 +37,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.dt = 5e-2 #time step
         self.max_timesteps = max_timesteps
         self.step_n = 0
-        self.reward_ver = reward_type
+        self.task_version = task_version
         
         # Target max-min limit
         self.target_high = [2, 2]
@@ -80,27 +80,71 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
+    def reward(self, episode_steps, total_episodes): ##pass in episode
+
     def reward(self, t):
               
         reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
         penalty = 1 - (1 / 1000**euclidian_distance)
-        if euclidian_distance <= self.target_radius:
-            reward = 1
-        else:
+
+        if self.task_version == "delay_task":
+
+            if total_episodes % 2 == 0 and episode_steps <= 20:
+
+                if sum(self.activation) >= 0.1:   #maybe lower this
+                    reward = -10
+                else:
+                    reward = 0  
+
+            elif total_episodes % 2 == 0:  
+                reward = -1e-2 * penalty
+
+
+            if total_episodes % 2 == 1 and episode_steps <= 80:       
+                if sum(self.activation) >= 0.1:
+                    reward = -10
+                else:
+                    reward = 0  
+
+            elif total_episodes % 2 == 1:
+                reward = -1e-2 * penalty
+        
+
+        if self.task_version == "original":  
             reward = -1e-2 * penalty
+
         return reward
     
     def reset(self, episode):
+        
+        
         if episode % 2 == 0 :
             self.target = onp.array([-0.2, 0.55]) #[x,y]
-        else :
+        else:
             self.target = onp.array([0.2, 0.55]) #[x,y]
-        self.two_link_arm.reset()
-        state_dict = self.two_link_arm.states
-        self.state = np.array(state_dict.get("joint")) #import from effector module instead
+
+        if self.task_version == "delay_task":
+            self.targets_pos = onp.array([0.0, 0.0, 0.0, 0.0])
+
         
-        self.obs_state = np.append(self.target, self.state)
+        self.two_link_arm.reset()
+
+        state_dict = self.two_link_arm.states
+
+        self.joints = onp.array(state_dict.get("joint")).squeeze() #import from effector module instead
+        self.activation = onp.array(state_dict.get("activation"))
+
+        if self.task_version == "delay_task":
+            print("targets pos shapt", self.targets_pos.shape)
+            print("joints shape", self.joints.shape)
+
+            print("activation shape", self.activation.shape)
+            self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
+
+        if self.task_version == "original":
+            self.obs_state = onp.concatenate([self.target, self.joints, self.activation])
+
         self.render_2(self.joints[:2])
         return onp.array(self.obs_state, dtype = onp.float32)
 
@@ -115,41 +159,70 @@ class EffectorTwoLinkArmEnv(gym.Env):
             return True
         return False  
         
-    def step(self, episode_steps, action):
+    def step(self, episode_steps, action, total_episodes):  ##pass in episode number
 
-        action = action
-        #Integrate and get state
 
-        #Calling effector and integrating, default is Euler
+        if self.task_version == "delay_task":
+
+            if total_episodes % 2 == 0  and episode_steps <= 20: #(even will be 20 second, left reaches)
+                self.targets_pos ==  onp.array([0.0, 0.0, 0.0, 0.0])
+
+            if total_episodes % 2 == 1  and episode_steps <= 80: #(odd will be 80 second, right reaches)
+                self.targets_pos == onp.array([0.0, 0.0, 0.0, 0.0])
+
+            else:
+                self.targets_pos == onp.array([-0.2, 5.5, 0.2, 5.5])  #after delay, both targets known
+
+
+            #Integrate and get state
+
+        #Take step in environment and integrate, default is Euler
         self.two_link_arm.step(action)    
 
-        #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip"
+        #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"
         state_dict = self.two_link_arm.states
 
-        #Extract cartestian coords          
+        #Extract states       
         self.joints = onp.array(state_dict.get("joint").squeeze())  
-        self.state = np.array(state_dict.get("joint")) 
+        self.activation = onp.array(state_dict.get("activation"))
+
+        #Extract hand pos for reward
         self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
         
-        # Get full state
-        self.obs_state = np.append(self.target, self.state)
+        #Concatenate targets, joint angles, joint position, and muscle activation into full state
+        #for delay task modeled after experiment
+        if self.task_version == "delay_task":
+            self.obs_state = np.concatenate([self.targets_pos, self.joints, self.activation])
+
+        #for original task
+        if self.task_version == "original":
+            self.obs_state = np.concatenate([self.target, self.joints, self.activation])
+
         # Get reward
-        reward = self.reward(episode_steps)
+        reward = self.reward(episode_steps, total_episodes)
+
         # Get done
         done = self.done(episode_steps)
 
+        #Visualize
         self.render_2(self.joints[:2])
         
         # Return environment variables
         return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
     
+
     def euclidian_distance(self, a, b):
         return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+
 
     def close(self):
         if self.viewer:
             self.viewer.close()
             self.viewer = None
+
+
+
+
 
     #Visualization and Pygame
     def __p1(self, q):

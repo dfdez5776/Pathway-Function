@@ -142,4 +142,10 @@ def config_parser():
                         type= float, 
                         default= 0.2, 
                         help='SAC critic loss constant')
+    
+    parser.add_argument('--task_version', 
+                        type=str, 
+                        default= "original", 
+                        help='different versions of task for arm environment. Delay_task modeled after Li et al paper')
+    
     return parser

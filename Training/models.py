@@ -235,4 +235,3 @@ class RNN(nn.Module):
         out2 = self.fc22(out2)
 
         return out1, out2
-        

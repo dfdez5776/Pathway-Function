@@ -6,7 +6,7 @@ eps = 0.01
 seed = 1
 hid_dim = 256
 action_dim = 6
-inp_dim = 6
+inp_dim = 14
 log_steps = 10
 dt = 0.001
 max_timesteps = 100
@@ -25,8 +25,9 @@ policy_batch_iters = 1
 tau = 0.005
 automatic_entropy_tuning = True
 alpha = 0.2
+task_version = "delay_task"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/SAC/01"            
-reward_save_path = "training_reports/SAC/01"      
-vis_save_path = "visualization/SAC/01"      
+model_save_path = "checkpoints/test"            
+reward_save_path = "training_reports/test"      
+vis_save_path = "visualization/test"      

@@ -142,7 +142,7 @@ class Effector(th.nn.Module):
     else:
       raise ValueError("Provided integration method not recognized : {}".format(self.integration_method))
     
-    self.states = {key: None for key in ["joint", "cartesian", "muscle", "geometry", "fingertip"]}
+    self.states = {key: None for key in ["joint", "cartesian", "muscle", "geometry", "fingertip", "activation"]}
 
   def step(self, action, **kwargs):
     endpoint_load = kwargs.get('endpoint_load', self.default_endpoint_load)
@@ -187,11 +187,12 @@ class Effector(th.nn.Module):
     #joint0 = self._parse_initial_joint_state(joint_state=joint_state, batch_size=batch_size)
     
     joint0 = th.Tensor([[0.0, pi, 0.0, 0.0]])
-    
     geometry0 = self.get_geometry(joint0)
-    #print("This is the starting angle", joint0)
     muscle0 = self.muscle.get_initial_muscle_state(batch_size=batch_size, geometry_state=geometry0)
-    states = {"joint": joint0, "muscle": muscle0, "geometry": geometry0}
+    activation0 = np.array([0.0] * self.n_muscles)
+    
+
+    states = {"joint": joint0, "muscle": muscle0, "geometry": geometry0, "activation": activation0}
 
     self._set_state(states)
 
@@ -397,6 +398,8 @@ class Effector(th.nn.Module):
       self.states[key] = val
     self.states["cartesian"] = self.joint2cartesian(joint_state=states["joint"])
     self.states["fingertip"] = self.states["cartesian"].chunk(2, dim=-1)[0]
+  
+
 
   def integrate(self, action, endpoint_load, joint_load):
     """Integrates the effector over one timestep. To do so, it first calls the :meth:`update_ode` method to obtain
@@ -415,7 +418,7 @@ class Effector(th.nn.Module):
   def _euler(self, action, endpoint_load, joint_load):
     states0 = self.states
     state_derivative = self.ode(action, states0, endpoint_load, joint_load)
-    states = self.integration_step(self.minidt, state_derivative=state_derivative, states=states0)
+    states = self.integration_step(self.minidt, state_derivative=state_derivative, states=states0, action = action)
     self._set_state(states)
 
   def _rungekutta4(self, action, endpoint_load, joint_load):
@@ -431,7 +434,7 @@ class Effector(th.nn.Module):
     states = self.integration_step(self.minidt, state_derivative=k, states=states0)
     self._set_state(states)
 
-  def integration_step(self, dt, state_derivative, states):
+  def integration_step(self, dt, state_derivative, states, action):
     """Performs one numerical integration step for the :class:`motornet.muscle.Muscle` object class or
     subclass, and then for the :class:`motornet.skeleton.Skeleton` object class or subclass.
 
@@ -451,6 +454,8 @@ class Effector(th.nn.Module):
       "muscle": self.muscle.integrate(dt, state_derivative["muscle"], states["muscle"], states["geometry"]),
       "joint": self.skeleton.integrate(dt, state_derivative["joint"], states["joint"])}
     new_states["geometry"] = self.get_geometry(new_states["joint"])
+    new_states["activation"] = np.array(action)
+    
     return new_states
 
   def ode(self, action, states, endpoint_load, joint_load):

@@ -17,8 +17,6 @@ from reward_vis import *
 from policy_replay import PolicyReplayBuffer
 from torch.optim import Adam
 
-#from utils.gym import get_wrapper_by_name  
-
 from models import RNN_MultiRegional, RNN
 import scipy.io as sio
 import matplotlib.pyplot as plt
@@ -79,7 +77,7 @@ class On_Policy_Agent():
         hn = hn.to(self.device)
 
         if evaluate == False: 
-            action, _, _, _, hn = policy.sample(state, hn, sampling=True)
+            action, _, _, _, hn = policy.sample(state, hn, sampling=True )
         else:
             _, _, action, _, hn = policy.sample(state, hn, sampling=True)
 
@@ -261,7 +259,7 @@ class On_Policy_Agent():
         '''
 
         actor_bg = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
-        critic_bg = RNN(self.inp_dim, self.hid_dim).to(self.device)
+        critic_bg = RNN_AC(self.inp_dim, self.hid_dim).to(self.device)
 
         actor_bg_optimizer = self.optimizer_spec_actor.constructor(actor_bg.parameters(), **self.optimizer_spec_actor.kwargs)
         critic_bg_optimizer = self.optimizer_spec_critic.constructor(critic_bg.parameters(), **self.optimizer_spec_critic.kwargs)
@@ -318,7 +316,7 @@ class On_Policy_Agent():
         ep_trajectory = []
 
         #num_layers specified in the policy model 
-        h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+        h_prev = torch.zeros(size=(1, 1, self.hid_dim * 5), device=self.device)
 
         ### STEPS PER EPISODE ###
         for t in range(max_steps):
@@ -369,7 +367,7 @@ class On_Policy_Agent():
                 activity_norm = float(torch.norm(h_prev))
 
                 # reset training conditions
-                h_prev = torch.zeros(size=(1, 1, self.hid_dim * 3), device=self.device)
+                h_prev = torch.zeros(size=(1, 1, self.hid_dim * 5), device=self.device)
                 state = self.env.reset(total_episodes) 
 
                 # resest lists
@@ -455,7 +453,7 @@ class On_Policy_Agent():
         next_state = torch.tensor(np.array([step[3] for step in tuple]), device=self.device).unsqueeze(0)
         mask = torch.tensor(np.array([step[4] for step in tuple]), device=self.device).unsqueeze(1)
 
-        h_update_actor = torch.zeros(size=(1, 1, hid_dim*3), device=self.device, dtype = torch.float32)
+        h_update_actor = torch.zeros(size=(1, 1, hid_dim*5), device=self.device, dtype = torch.float32)
         h_update_critic = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
 
         delta = reward + gamma * mask * value(next_state, h_update_critic) - value(state, h_update_critic)
@@ -668,7 +666,7 @@ class Off_Policy_Agent():
                 action, h_current, _ = self.select_action(state, h_prev, evaluate = False)
 
             for _ in range(self.frame_skips):
-                next_state, reward, done = self.env.step(episode_steps, action)
+                next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
                 if done == False:
                     episode_steps += 1
                 episode_reward += reward[0]

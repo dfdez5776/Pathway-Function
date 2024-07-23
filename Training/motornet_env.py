@@ -34,7 +34,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.target_radius = 0.1
 
         self.max_speed = np.pi #rad/sec
-        self.dt = 0.05 #time step
+        self.dt = 5e-2 #time step
         self.max_timesteps = max_timesteps
         self.step_n = 0
         self.reward_ver = reward_type
@@ -82,11 +82,13 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reward(self, t):
               
+        reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
+        penalty = 1 - (1 / 1000**euclidian_distance)
         if euclidian_distance <= self.target_radius:
             reward = 1
         else:
-            reward = 0
+            reward = -1e-2 * penalty
         return reward
     
     def reset(self, episode):

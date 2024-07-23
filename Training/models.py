@@ -31,9 +31,10 @@ class RNN_MultiRegional(nn.Module):
 
         # Masks for individual regions
         self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.zeros(size=(hid_dim,))]).to(device)
+        self.thal_mask = torch.cat([torch.zeros(size=(hid_dim*3,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
         self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
         self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
-        
+
         # Inhibitory Connections
         self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
         # Excitatory Connections
@@ -58,7 +59,7 @@ class RNN_MultiRegional(nn.Module):
         nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.str2snr_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
+        nn.init.uniform_(self.m12str_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.thal2m1_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.m12thal_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.thal2str_weight_l0_hh, 0, 0.01)
@@ -84,6 +85,10 @@ class RNN_MultiRegional(nn.Module):
         self.m12str_mask_inhibitory = torch.zeros(size=(hid_dim, int(0.3*hid_dim))).to(device)
         self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).to(device)
 
+        # M1 to thal mask
+        self.m12thal_mask = torch.cat([torch.zeros(size=(int(hid_dim/2), hid_dim)),
+                                       torch.ones(size=(int(hid_dim/2), hid_dim))]).to(device)
+
         # STR to STN mask
         self.str2stn_mask = torch.cat([torch.zeros(hid_dim, int(hid_dim/2)),
                                        torch.ones(hid_dim, int(hid_dim/2))], dim=1).to(device)
@@ -98,10 +103,10 @@ class RNN_MultiRegional(nn.Module):
         self.str2snr_D = -1 * torch.eye(hid_dim).to(device)
         self.str2snr_mask = torch.cat([torch.ones(hid_dim, int(hid_dim/2)),
                                        torch.zeros(hid_dim, int(hid_dim/2))], dim=1).to(device)
-
+        
         # Input weights
         self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim * 5)))
-        nn.init.uniform_(self.inp_weight, -0.1, 0.1)
+        nn.init.uniform_(self.inp_weight, 0, 0.1)
 
         # Behavioral output layer
         self.mean_linear = nn.Linear(hid_dim * 5, action_dim)
@@ -137,6 +142,7 @@ class RNN_MultiRegional(nn.Module):
         str2stn_rec = self.str2stn_mask * F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1)
         stn2snr_rec = F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1) @ self.stn2snr_D
         snr2thal_rec = F.hardtanh(self.snr2thal_weight_l0_hh, min_val=1e-10, max_val=1) @ self.snr2thal_D
+        inp_weight = F.hardtanh(self.inp_weight, 1e-10, 1)
 
         # Concatenate into single weight matrix
 
@@ -150,7 +156,7 @@ class RNN_MultiRegional(nn.Module):
 
         # Loop through RNN
         for t in range(size):
-            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight * self.str_mask)))
+            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ inp_weight * self.thal_mask)))
             new_hs.append(hn_next)
 
         # Collect hidden states

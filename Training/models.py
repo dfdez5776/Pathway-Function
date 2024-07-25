@@ -170,7 +170,7 @@ class RNN_MultiRegional(nn.Module):
     
         return mean_out, std_out, rnn_out, hn_last
     
-    def sample(self, state, hn, sampling, len_seq):
+    def sample(self, state, hn, sampling, reparameterize = True):
 
         epsilon = 1e-4    
         
@@ -181,10 +181,15 @@ class RNN_MultiRegional(nn.Module):
 
         mean = mean.reshape(-1, mean.size()[-1])
         log_std = log_std.reshape(-1, log_std.size()[-1])
-
         std = log_std.exp()
+
+
         normal = Normal(mean, std)
-        x_t = normal.rsample()
+
+        if reparameterize == True:
+            x_t = normal.rsample()
+        if reparameterize == False:
+            x_t = normal.sample()  #Changed to include reparameterization only whenu pdating policy 
 
         y_t = torch.tanh(x_t)
         
@@ -206,32 +211,22 @@ class RNN_MultiRegional(nn.Module):
 
 ########## SINGLE RNN MODEL ##########
 
-class RNN(nn.Module):
+class Critic(nn.Module):
     def __init__(self, inp_dim, action_dim, hid_dim):
-        super(RNN, self).__init__()
-
-        self.inp_dim = inp_dim
-        self.hid_dim = hid_dim
-        self.action_dim = action_dim
+        super(Critic, self).__init__()
         
-        self.fc11 = nn.Linear(inp_dim + action_dim, hid_dim)
-        self.rnn1 = nn.GRU(hid_dim, hid_dim, batch_first=True)
-        self.fc12 = nn.Linear(hid_dim, 1)
+        self.fc1 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc2 = nn.GRU(hid_dim, hid_dim, batch_first=True)
+        self.q_out = nn.Linear(hid_dim, 1)
 
-        self.fc21 = nn.Linear(inp_dim + action_dim, hid_dim)
-        self.rnn2 = nn.GRU(hid_dim, hid_dim, batch_first=True)
-        self.fc22 = nn.Linear(hid_dim, 1)
-    
     def forward(self, state, action, hn):
 
-        xu = torch.cat([state, action], dim=-1)
+        xu = torch.cat([state, action], dim=2)
         
-        out1 = F.relu(self.fc11(xu))
-        out1, _ = self.rnn1(out1, hn)
-        out1 = self.fc12(out1)
+        out1 = F.relu(self.fc1(xu))
+        out1, _ = self.fc2(out1, hn)
+        q_val = self.q_out(out1)
 
-        out2 = F.relu(self.fc21(xu))
-        out2, _ = self.rnn2(out2, hn)
-        out2 = self.fc22(out2)
+        return q_val
 
-        return out1, out2
+

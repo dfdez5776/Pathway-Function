@@ -125,6 +125,45 @@ def gradient_vis(reward_save_path, vis_save_path):
         plt.savefig(vis_save_path)
 
 
+def loss_vis(reward_save_path, vis_save_path):
+
+  
+    
+
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
+    
+    
+    actor_loss = data["actor_loss"]
+    critic1_loss = data["critic1_loss"]
+    critic2_loss = data["critic2_loss"]
+    
+    actor_loss_vis = plt.figure()
+    plt.plot(range(1, len(actor_loss)+1), actor_loss)
+    plt.suptitle('Actor Loss')
+
+    
+    if __name__ == "__main__":
+        plt.show()
+    else:
+        vis_save_path = f'{vis_save_path}_actor_loss.png'
+        plt.savefig(vis_save_path) 
+    
+    critic_loss_vis = plt.figure()
+    plt.plot(range(1, len(critic1_loss)+1), critic1_loss)
+    plt.plot(range(1, len(critic2_loss)+1), critic2_loss)
+    plt.suptitle('Critic Loss')
+
+    
+    if __name__ == "__main__":
+        plt.show()
+    else:
+        vis_save_path = f'{vis_save_path}_critic_loss.png'
+        plt.savefig(vis_save_path)
+
+
+
 
 
 def activity_vis(reward_save_path, vis_save_path):

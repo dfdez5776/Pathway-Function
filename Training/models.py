@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from torch.distributions import Normal
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import numpy as np
@@ -11,7 +12,7 @@ import math
 class RNN_MultiRegional(nn.Module):
     def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
         super(RNN_MultiRegional, self).__init__()
-        
+
         '''
             Multi-Regional RNN model, implements interaction between striatum and ALM
             
@@ -220,8 +221,9 @@ class Critic(nn.Module):
         self.q_out = nn.Linear(hid_dim, 1)
 
     def forward(self, state, action, hn):
-
-        xu = torch.cat([state, action], dim=2)
+        
+        with torch.no_grad():
+            xu = torch.cat([state, action], dim=2)
         
         out1 = F.relu(self.fc1(xu))
         out1, _ = self.fc2(out1, hn)

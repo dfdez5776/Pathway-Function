@@ -25,15 +25,15 @@ class EffectorTwoLinkArmEnv(gym.Env):
     def __init__(self, max_timesteps, render_mode, task_version):
 
         
-        self.state = np.array([0.0]*12) 
-        self.joints = np.array([0.0]*4) 
+        self.state = onp.array([0.0]*12) 
+        self.joints = onp.array([0.0]*4) 
         self.obs_state = None
 
         self.viewer = None 
 
         self.target_radius = 0.1
 
-        self.max_speed = np.pi #rad/sec
+        self.max_speed = onp.pi #rad/sec
         self.dt = 5e-2 #time step
         self.max_timesteps = max_timesteps
         self.step_n = 0
@@ -43,7 +43,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.target_high = [2, 2]
         self.target_low = [-1*i for i in self.target_high]
         # Joint max-min limit
-        self.joint_high = [np.pi, np.pi]
+        self.joint_high = [onp.pi, onp.pi]
         self.joint_low = [-1*i for i in self.joint_high]
         self.current_hand_pos = onp.array([0.0 , 0.0])
         
@@ -182,16 +182,18 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.activation = onp.array(state_dict.get("activation"))
 
         #Extract hand pos for reward
-        self.current_hand_pos = np.array(state_dict.get("fingertip").squeeze())
+        self.current_hand_pos = onp.array(state_dict.get("fingertip").squeeze())
         
         #Concatenate targets, joint angles, joint position, and muscle activation into full state
         #for delay task modeled after experiment
         if self.task_version == "delay_task":
-            self.obs_state = np.concatenate([self.targets_pos, self.joints, self.activation])
+            self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
+
 
         #for original task
         if self.task_version == "original":
-            self.obs_state = np.concatenate([self.target, self.joints, self.activation])
+            self.obs_state = onp.concatenate([self.target, self.joints, self.activation])
+
 
         # Get reward
         reward = self.reward(episode_steps, total_episodes)
@@ -207,7 +209,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
 
     def euclidian_distance(self, a, b):
-        return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+        return onp.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+
 
 
     def close(self):
@@ -230,10 +233,10 @@ class EffectorTwoLinkArmEnv(gym.Env):
             Output: 
                 x_1 - position of mass 1 
         """
-        x = self._l1 * np.cos(q[0]) 
-        y = self._l1 * np.sin(q[0]) 
+        x = self._l1 * onp.cos(q[0]) 
+        y = self._l1 * onp.sin(q[0]) 
 
-        return np.asarray([x, y])
+        return onp.asarray([x, y])
     
     def __p2(self, q):
         """
@@ -243,10 +246,10 @@ class EffectorTwoLinkArmEnv(gym.Env):
             Output: 
                 x_2 - position of mass 2
         """
-        x = self._l1 * np.sin(q[0]) + self._l2 * np.sin(q[0] + q[1])
-        y = -self._l1 * np.cos(q[0]) - self._l2 * np.cos(q[0] + q[1])
+        x = self._l1 * onp.sin(q[0]) + self._l2 * onp.sin(q[0] + q[1])
+        y = -self._l1 * onp.cos(q[0]) - self._l2 * onp.cos(q[0] + q[1])
 
-        return np.asarray([x, y])
+        return onp.asarray([x, y])
 
     def render_2(self, q):
 
@@ -273,7 +276,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         p1 = self.__p1(q)*scale
         p2 = self.__p2(q)*scale
 
-        xys = np.array([[0,0] , p1, p2])
+        xys = onp.array([[0,0] , p1, p2])
         thetas = [q[0] - pi / 2, q[0] + q[1] - pi / 2] 
         link_lengths = [self._l1*scale, self._l2*scale]
 
@@ -323,12 +326,12 @@ class EffectorTwoLinkArmEnv(gym.Env):
             pygame.display.flip()
 
         elif self.render_mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes = (1,0,2)
+            return onp.transpose(
+                onp.array(pygame.surfarray.pixels3d(self.screen)), axes = (1,0,2)
             )
 
     def euclidian_distance(self, a, b):
-        return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+        return onp.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
     def close(self):
         # print('close')

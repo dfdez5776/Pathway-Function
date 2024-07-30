@@ -97,6 +97,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
             elif total_episodes % 2 == 0:  
                 reward = -1e-2 * penalty
+                
 
 
             if total_episodes % 2 == 1 and episode_steps <= 80:       
@@ -107,10 +108,15 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
             elif total_episodes % 2 == 1:
                 reward = -1e-2 * penalty
+              
         
 
         if self.task_version == "original":  
-            reward = -1e-2 * penalty
+            #reward = -1e-2 * penalty
+            if euclidian_distance <= self.target_radius:
+                reward = 1
+            else:
+                reward = 0
 
         return reward
     

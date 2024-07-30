@@ -209,7 +209,86 @@ class RNN_MultiRegional(nn.Module):
             mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
 
         return action, log_prob, mean, rnn_out, hn
+#Vanilla RNN for testing
 
+
+class RNN(nn.Module):
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
+        super(RNN, self).__init__()
+
+        self.inp_dim = inp_dim
+        self.hid_dim = hid_dim*5
+        self.action_dim = action_dim
+        self.action_scale = action_scale
+        self.action_bias = action_bias
+        self.device = device
+
+        self.f1 = nn.Linear(self.inp_dim, self.hid_dim)
+        self.f2 = nn.Linear(self.hid_dim, self.hid_dim)
+        self.mean = nn.Linear(self.hid_dim, self.action_dim)
+        self.std = nn.Linear(self.hid_dim, self.action_dim)
+
+        self.epsilon = 1e-4
+
+
+    def forward(self, state, h_prev, sampling):
+        
+        x =  F.relu(self.f1(state))
+
+        #x = pack_padded_sequence(x, len_seq, batch_first = True, enforce_sorted = False)
+
+        x, hn_next = (self.f2(x), h_prev)
+
+        #if sampling == False:
+        #    x, len_x_seq = pad_packed_sequence(x, batch_first = True)
+
+        #if sampling == True:
+        #    x = x.squeeze(1)
+
+        x = F.relu(x)
+
+        mean = self.mean(x)
+        log_std = self.std(x)
+        log_std = torch.clamp(log_std, min = -5, max = 5)
+
+        return mean, log_std, x, hn_next
+
+
+    def sample(self, state, h_prev, sampling, reparameterize):
+
+        mean, log_std, rnn_out, hn = self.forward(state, h_prev, sampling)
+
+
+        mean_size = mean.size()
+        log_std_size = log_std.size()
+
+        mean = mean.reshape(-1, mean.size()[-1])
+        log_std = log_std.reshape(-1, log_std.size()[-1])
+        std = log_std.exp()
+
+        probs = Normal(mean, std)
+
+        if reparameterize:
+            actions = probs.rsample()
+        else:
+            actions = probs.sample()
+
+        action = torch.tanh(actions)
+
+        log_probs = probs.log_prob(actions)
+        log_probs -= torch.log(self.action_scale * (1-action.pow(2)) + self.epsilon)
+        log_probs = log_probs.sum(1, keepdim = True)
+
+
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+
+        if sampling == False:
+            action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
+            log_probs = log_probs.reshape(log_std_size[0], log_std_size[1], 1) 
+            mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
+
+        return action, log_probs, mean, rnn_out, hn
+   
 ########## SINGLE RNN MODEL ##########
 
 class Critic(nn.Module):
@@ -230,5 +309,33 @@ class Critic(nn.Module):
         q_val = self.q_out(out1)
 
         return q_val
+class Critic2(nn.Module):
+    def __init__(self, inp_dim, action_dim, hid_dim):
+        super(Critic2, self).__init__()
+
+        self.fc11 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc12 = nn.GRU(hid_dim, hid_dim, batch_first = True)
+        self.fc13 = nn.Linear(hid_dim, 1)
+
+        self.fc21 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc22 = nn.GRU(hid_dim, hid_dim, batch_first = True)
+        self.fc23 = nn.Linear(hid_dim, 1)
+
+    def forward(self, state, action, hn):
+
+        xu = torch.cat([state, action], dim = -1)
+        
+        out1 = F.relu(self.fc11(xu))
+        out1, _ = self.fc12(out1, hn)
+        out1 = self.fc13(out1)
+
+
+        out2 = F.relu(self.fc21(xu))
+        out2, _ = self.fc22(out2, hn)
+        out2 = self.fc23(out2)
+
+        return out1, out2 
+
+
 
 

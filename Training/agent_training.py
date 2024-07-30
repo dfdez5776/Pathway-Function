@@ -17,7 +17,7 @@ from reward_vis import *
 from policy_replay import PolicyReplayBuffer
 from torch.optim import Adam
 
-from models import RNN_MultiRegional, Critic
+from models import RNN_MultiRegional, RNN, Critic, Critic2
 import scipy.io as sio
 import matplotlib.pyplot as plt
 
@@ -567,23 +567,26 @@ class Off_Policy_Agent():
         self.lr = lr
 
         #initialize Actor/Critic RNNs 
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        #self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
 
-        self.critic1 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
-        self.critic2 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
+        #self.critic1 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
+        #self.critic2 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
+        self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
-        self.target_critic1 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
-        self.target_critic2 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
-
+        #self.target_critic1 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
+        #self.target_critic2 = Critic(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
+        self.target_critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
         #Optimizers now defined for each Q network seperately
         self.actor_optimizer = self.optimizer_spec_actor.constructor(self.actor.parameters(), **self.optimizer_spec_actor.kwargs) 
 
-        self.critic1_optimizer = self.optimizer_spec_critic.constructor(self.critic1.parameters(), **self.optimizer_spec_critic.kwargs)
-        self.critic2_optimizer = self.optimizer_spec_critic.constructor(self.critic2.parameters(), **self.optimizer_spec_critic.kwargs)
+        #self.critic1_optimizer = self.optimizer_spec_critic.constructor(self.critic1.parameters(), **self.optimizer_spec_critic.kwargs)
+        #self.critic2_optimizer = self.optimizer_spec_critic.constructor(self.critic2.parameters(), **self.optimizer_spec_critic.kwargs)
 
-        self.target_critic1_optimizer = self.optimizer_spec_critic.constructor(self.target_critic1.parameters(), **self.optimizer_spec_critic.kwargs)
-        self.target_critic2_optimizer = self.optimizer_spec_critic.constructor(self.target_critic2.parameters(), **self.optimizer_spec_critic.kwargs)
+        #self.target_critic1_optimizer = self.optimizer_spec_critic.constructor(self.target_critic1.parameters(), **self.optimizer_spec_critic.kwargs)
+        #self.target_critic2_optimizer = self.optimizer_spec_critic.constructor(self.target_critic2.parameters(), **self.optimizer_spec_critic.kwargs)
+        self.critic_optimizer = self.optimizer_spec_critic.constructor(self.critic.parameters(), **self.optimizer_spec_critic.kwargs)
 
         if continue_training == "yes":
             
@@ -605,8 +608,8 @@ class Off_Policy_Agent():
             #self.target_critic2.optimizer.load_state_dict(checkpoint['target_critic2_optimizer_state_dict'])
 
         #update critics and their targets
-        self.hard_update(self.target_critic1, self.critic1)
-        self.hard_update(self.target_critic2, self.critic2)
+        self.hard_update(self.target_critic, self.critic)
+        #self.hard_update(self.target_critic2, self.critic2)
 
 
 
@@ -651,8 +654,8 @@ class Off_Policy_Agent():
                      'all_episode_rewards' : [],
                      'actor_gradients' : [],
                      'critic_gradients' : [],
-                     'critic1_loss': [],
-                     'critic2_loss': [],
+                     'critic_loss': [],
+                     'critic_target_loss': [],
                      'actor_loss': [],
                      'sampled_entropies': [],
                      'batch_entropies': []
@@ -663,8 +666,8 @@ class Off_Policy_Agent():
         all_steps = []
         all_reward = []
         actor_losses = []
-        critic1_losses = []
-        critic2_losses = []
+        critic_losses = []
+        critic_target_losses = []
         sampled_entropies = []
         batch_entropies = []
         ep_trajectory = []
@@ -683,9 +686,9 @@ class Off_Policy_Agent():
 
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
-                    critic1_loss, critic2_loss, policy_loss, sampled_entropy, batch_entropy = self.update(done) #grad_vis_actor, grad_vis_critic
-                    critic1_losses.append(critic1_loss)
-                    critic2_losses.append(critic2_loss)
+                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy = self.update(done) #grad_vis_actor, grad_vis_critic
+                    critic_losses.append(critic_loss)
+                    critic_target_losses.append(critic_target_loss)
                     actor_losses.append(policy_loss)
                     sampled_entropies.append(sampled_entropy)
                     batch_entropies.append(batch_entropy)
@@ -730,13 +733,13 @@ class Off_Policy_Agent():
                         torch.save({
                             'iteration': t,
                             'agent_state_dict': self.actor.state_dict(),
-                            'critic1_state_dict': self.critic1.state_dict(),
-                            'critic2_state_dict': self.critic2.state_dict(),
-                            'target_critic1_state': self.target_critic1.state_dict(),
-                            'target_critic2_state': self.target_critic2.state_dict(),
+                            'critic_state_dict': self.critic.state_dict(),
+                            #'critic2_state_dict': self.critic2.state_dict(),
+                            'target_critic_state': self.target_critic.state_dict(),
+                            #'target_critic2_state': self.target_critic2.state_dict(),
                             'agent_optimizer_state_dict': self.actor_optimizer.state_dict(),
-                            'critic1_optimizer_state_dict': self.critic1_optimizer.state_dict(),
-                            'critic2_optimizer_state_dict': self.critic2_optimizer.state_dict()
+                            'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+                            #'critic2_optimizer_state_dict': self.critic2_optimizer.state_dict()
                         }, self.model_save_path + '.pth')
 
                     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
@@ -749,8 +752,8 @@ class Off_Policy_Agent():
                 Statistics["actor_gradients"] = grad_vis_actor
                 Statistics["critic_gradients"] = grad_vis_critic
                 Statistics["actor_loss"] = actor_losses
-                Statistics["critic1_loss"] = critic1_losses
-                Statistics["critic2_loss"] = critic2_losses
+                Statistics["critic_loss"] = critic_losses
+                Statistics["critic_target_loss"] = critic_target_losses
                 Statistics["sampled_entropies"] = sampled_entropies
                 Statistics["batch_entropies"] = batch_entropies
               
@@ -766,7 +769,7 @@ class Off_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes % 10 == 0: #save graphs every 3000 episodes
+                if total_episodes % 1000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
@@ -813,8 +816,10 @@ class Off_Policy_Agent():
             next_action, next_log_prob, _, _, _ = self.actor.sample(next_state_batch, h0_actor,sampling = False, reparameterize = False)
             next_log_prob = mask * next_log_prob
             next_action = mask * next_action
-            qf1_next_target = mask * self.target_critic1(next_state_batch, next_action, h0_critic)
-            qf2_next_target = mask * self.target_critic2(next_state_batch, next_action, h0_critic)
+            qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
+            qf1_next_target =  mask * qf1_next_target
+            qf2_next_target = mask * qf2_next_target
+            #qf2_next_target = mask * self.target_critic2(next_state_batch, next_action, h0_critic)
         min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
         target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
             #add done mask to be 0 if done 
@@ -824,8 +829,8 @@ class Off_Policy_Agent():
             #masked before taking minimum
 
         #Calculate q using batch state and batch action
-        qf1 = self.critic1(state_batch, action_batch, h0_critic)
-        qf2 = self.critic2(state_batch, action_batch, h0_critic)
+        qf1, qf2 = self.critic(state_batch, action_batch, h0_critic)
+        #qf2 = self.critic2(state_batch, action_batch, h0_critic)
 
         #Mask critic outputs
         qf1 = mask * qf1  
@@ -835,17 +840,18 @@ class Off_Policy_Agent():
 
         qf1_loss = 0.5*F.mse_loss(qf1, target_q)
         qf2_loss = 0.5*F.mse_loss(qf2, target_q)
+        qf_loss = qf1_loss + qf2_loss
         
 
 
         #Take Gradient Steps for Q functions
-        self.critic1_optimizer.zero_grad()
-        qf1_loss.backward(retain_graph=True)
-        self.critic1_optimizer.step()
+        self.critic_optimizer.zero_grad()
+        qf_loss.backward(retain_graph = True)
+        self.critic_optimizer.step()
 
-        self.critic2_optimizer.zero_grad()
-        qf2_loss.backward(retain_graph = True)
-        self.critic2_optimizer.step()
+        #self.critic2_optimizer.zero_grad()
+        #qf2_loss.backward(retain_graph = True)
+        #self.critic2_optimizer.step()
 
         ##Policy Update##
         #Sample reparameterized actions from state batch
@@ -855,14 +861,16 @@ class Off_Policy_Agent():
         log_prob_batch = mask * log_prob_batch
 
         #Get Q Value of Current State and Action Pairs
-        qf1_pi = mask * self.critic1(state_batch, reparam_action, h0_critic)
-        qf2_pi = mask * self.critic2(state_batch, reparam_action, h0_critic)  #likewise take mask before comparing
+        qf1_pi, qf2_pi = self.critic(state_batch, reparam_action, h0_critic)
+        qf1_pi = mask * qf1_pi
+        qf2_pi = mask * qf2_pi
+        # qf2_pi = mask * self.critic2(state_batch, reparam_action, h0_critic)  #likewise take mask before comparing
 
         min_qf_pi = torch.min(qf1_pi, qf2_pi)
 
 
         #Policy loss
-        policy_loss = torch.mean((self.alpha * log_prob_batch) - min_qf_pi) 
+        policy_loss = ((self.alpha * log_prob_batch) - min_qf_pi).mean()
 
        
         #Policy Gradient Step
@@ -883,8 +891,8 @@ class Off_Policy_Agent():
             self.alpha = self.log_alpha.exp()
 
         #Soft Update Actor Critic
-        self.soft_update(self.target_critic1, self.critic1, self.tau)
-        self.soft_update(self.target_critic2, self.critic2, self.tau)
+        self.soft_update(self.target_critic, self.critic, self.tau)
+        #self.soft_update(self.target_critic2, self.critic2, self.tau)
 
         
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), torch.sum(next_log_prob).item(), torch.sum(log_prob_batch).item()

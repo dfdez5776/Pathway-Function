@@ -136,8 +136,8 @@ def loss_vis(reward_save_path, vis_save_path):
     
     
     actor_loss = data["actor_loss"]
-    critic1_loss = data["critic1_loss"]
-    critic2_loss = data["critic2_loss"]
+    critic_loss = data["critic_loss"]
+    critic_target_loss = data["critic_target_loss"]
     sampled_entropies = data["sampled_entropies"]
     batch_entropies = data["batch_entropies"]
 
@@ -155,8 +155,8 @@ def loss_vis(reward_save_path, vis_save_path):
         plt.savefig(vis_save_path) 
     
     critic_loss_vis = plt.figure()
-    plt.plot(range(1, len(critic1_loss)+1), critic1_loss, label = "critic1 loss")
-    plt.plot(range(1, len(critic2_loss)+1), critic2_loss, label = "critic 2 loss")
+    plt.plot(range(1, len(critic_loss)+1), critic_loss, label = "critic1 loss")
+    plt.plot(range(1, len(critic_target_loss)+1), critic_target_loss, label = "critic 2 loss")
     plt.legend()
     plt.suptitle('Critic Loss')
 

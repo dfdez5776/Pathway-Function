@@ -453,7 +453,7 @@ class On_Policy_Agent():
         next_state = torch.tensor(np.array([step[3] for step in tuple]), device=self.device).unsqueeze(0)
         mask = torch.tensor(np.array([step[4] for step in tuple]), device=self.device).unsqueeze(1)
 
-        h_update_actor = torch.zeros(size=(1, 1, hid_dim*5), device=self.device, dtype = torch.float32)
+        h_update_actor = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
         h_update_critic = torch.zeros(size=(1, 1, hid_dim), device=self.device, dtype = torch.float32)
 
         delta = reward + gamma * mask * value(next_state, h_update_critic) - value(state, h_update_critic)
@@ -679,7 +679,7 @@ class Off_Policy_Agent():
         grad_vis_actor = {}
         grad_vis_critic = {}
 
-        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim*5), device = self.device )
+        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
@@ -696,13 +696,16 @@ class Off_Policy_Agent():
 
             with torch.no_grad():   
                 action, h_current, _ = self.select_action(state, h_prev, evaluate = False)
+              
+                
 
             for _ in range(self.frame_skips):
+                episode_steps += 1
                 next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
-                if done == False:
-                    episode_steps += 1
+    
                 episode_reward += reward[0]
                 if done == True:
+                    print("done!")
                     break
 
             mask = 1.0 if episode_steps == self.env.max_timesteps else float(not done)
@@ -783,10 +786,11 @@ class Off_Policy_Agent():
                 
                 ep_trajectory = []
 
-                h_prev = torch.zeros(size = (1 ,1, self.hid_dim*5), device = self.device)
+                h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
     def update(self, done):
+
         done = int(done)
         #Sample from replay memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = self.policy_memory.sample(self.policy_batch_size)
@@ -805,7 +809,7 @@ class Off_Policy_Agent():
         mask_batch = torch.add(torch.mul(mask_batch, -1), 1)
 
         #Activites for sampling
-        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim * 5)).to(self.device)
+        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 
@@ -820,8 +824,8 @@ class Off_Policy_Agent():
             qf1_next_target =  mask * qf1_next_target
             qf2_next_target = mask * qf2_next_target
             #qf2_next_target = mask * self.target_critic2(next_state_batch, next_action, h0_critic)
-        min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
-        target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
+            min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
+            target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
             #add done mask to be 0 if done 
             #masked log probs 
             #seperated critic and target
@@ -846,7 +850,7 @@ class Off_Policy_Agent():
 
         #Take Gradient Steps for Q functions
         self.critic_optimizer.zero_grad()
-        qf_loss.backward(retain_graph = True)
+        qf_loss.backward()
         self.critic_optimizer.step()
 
         #self.critic2_optimizer.zero_grad()
@@ -875,7 +879,7 @@ class Off_Policy_Agent():
        
         #Policy Gradient Step
         self.actor_optimizer.zero_grad()
-        policy_loss.backward(retain_graph = True)
+        policy_loss.backward()
         self.actor_optimizer.step()
 
         #Automatic Entropy Tuning

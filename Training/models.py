@@ -217,14 +217,16 @@ class RNN(nn.Module):
         super(RNN, self).__init__()
 
         self.inp_dim = inp_dim
-        self.hid_dim = hid_dim*5
+        self.hid_dim = hid_dim
         self.action_dim = action_dim
         self.action_scale = action_scale
         self.action_bias = action_bias
         self.device = device
 
         self.f1 = nn.Linear(self.inp_dim, self.hid_dim)
+        self.gru = nn.GRU(self.hid_dim, self.hid_dim, batch_first=True)
         self.f2 = nn.Linear(self.hid_dim, self.hid_dim)
+
         self.mean = nn.Linear(self.hid_dim, self.action_dim)
         self.std = nn.Linear(self.hid_dim, self.action_dim)
 
@@ -237,7 +239,7 @@ class RNN(nn.Module):
 
         #x = pack_padded_sequence(x, len_seq, batch_first = True, enforce_sorted = False)
 
-        x, hn_next = (self.f2(x), h_prev)
+        x, hn_next = self.gru(x, h_prev)
 
         #if sampling == False:
         #    x, len_x_seq = pad_packed_sequence(x, batch_first = True)
@@ -245,11 +247,15 @@ class RNN(nn.Module):
         #if sampling == True:
         #    x = x.squeeze(1)
 
-        x = F.relu(x)
+        x = F.relu(self.f2(x))
 
         mean = self.mean(x)
+        
+        
         log_std = self.std(x)
-        log_std = torch.clamp(log_std, min = -5, max = 5)
+        log_std = torch.clamp(log_std, min = -5, max = 2)  #between 0 and 1
+        
+        
 
         return mean, log_std, x, hn_next
 
@@ -266,26 +272,33 @@ class RNN(nn.Module):
         log_std = log_std.reshape(-1, log_std.size()[-1])
         std = log_std.exp()
 
+        
+       
+
         probs = Normal(mean, std)
+
+        
 
         if reparameterize:
             actions = probs.rsample()
         else:
             actions = probs.sample()
 
-        action = torch.tanh(actions)
+        action = torch.tanh(actions) * self.action_scale + self.action_bias  #bound between 0 and 1
+      
 
         log_probs = probs.log_prob(actions)
         log_probs -= torch.log(self.action_scale * (1-action.pow(2)) + self.epsilon)
         log_probs = log_probs.sum(1, keepdim = True)
 
 
-        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias 
 
         if sampling == False:
             action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
             log_probs = log_probs.reshape(log_std_size[0], log_std_size[1], 1) 
             mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
+
 
         return action, log_probs, mean, rnn_out, hn
    
@@ -309,6 +322,7 @@ class Critic(nn.Module):
         q_val = self.q_out(out1)
 
         return q_val
+    
 class Critic2(nn.Module):
     def __init__(self, inp_dim, action_dim, hid_dim):
         super(Critic2, self).__init__()

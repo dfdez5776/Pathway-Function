@@ -161,7 +161,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         return False  
         
     def step(self, episode_steps, action, total_episodes):  ##pass in episode number
-
+        
 
         if self.task_version == "delay_task":
 
@@ -186,6 +186,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
         #Extract states       
         self.joints = onp.array(state_dict.get("joint").squeeze())  
         self.activation = onp.array(state_dict.get("activation"))
+   
+       
 
         #Extract hand pos for reward
         self.current_hand_pos = onp.array(state_dict.get("fingertip").squeeze())

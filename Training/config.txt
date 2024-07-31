@@ -1,6 +1,6 @@
 ### GENERAL TRAINING PARAMETERS ###
 gamma = 0.99
-lr = 0.0001
+lr = 0.001
 weight_decay = 1e-4
 eps = 0.01
 seed = 1
@@ -14,7 +14,7 @@ frame_skips = 2
 action_scale = 0.5
 action_bias = 0.5
 max_steps = 1000000
-render_mode = "human"
+render_mode = "rgb_array"
 save_iter = 10
 load_model_checkpoint = "train"
 continue_training = "no"

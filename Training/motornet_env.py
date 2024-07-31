@@ -112,11 +112,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
         
 
         if self.task_version == "original":  
-            #reward = -1e-2 * penalty
+            reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
             if euclidian_distance <= self.target_radius:
                 reward = 1
-            else:
-                reward = 0
 
         return reward
     
@@ -126,7 +124,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if episode % 2 == 0 :
             self.target = onp.array([-0.2, 0.55]) #[x,y]
         else:
-            self.target = onp.array([0.2, 0.55]) #[x,y]
+            self.target = onp.array([0.55, 0.55]) #[x,y]
 
         if self.task_version == "delay_task":
             self.targets_pos = onp.array([0.0, 0.0, 0.0, 0.0])

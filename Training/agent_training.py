@@ -619,13 +619,13 @@ class Off_Policy_Agent():
 
         #For training
         if evaluate == False:
-            action, _, _, rnn_out, h_current = self.actor.sample(state, h_prev, sampling = True, reparameterize = False)
+            action, _, _, rnn_out, h_current = self.actor.sample(state, h_prev)
             
         #For testing
         if evaluate == True:
-            _, _, action, rnn_out, h_current = self.actor.sample(state, h_prev, sampling = True, reparameterize = False)
+            _, _, action, rnn_out, h_current = self.actor.sample(state, h_prev)
 
-        return action.detach().cpu().numpy()[0], h_current.detach().squeeze(0), rnn_out.detach().cpu().numpy()
+        return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy()
 
     def train(self, max_steps, load_model_checkpoint):
 
@@ -669,7 +669,7 @@ class Off_Policy_Agent():
 
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
-                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy = self.update(done) #grad_vis_actor, grad_vis_critic
+                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy = self.update() #grad_vis_actor, grad_vis_critic
                     critic_losses.append(critic_loss)
                     critic_target_losses.append(critic_target_loss)
                     actor_losses.append(policy_loss)
@@ -685,7 +685,6 @@ class Off_Policy_Agent():
             for _ in range(self.frame_skips):
                 episode_steps += 1
                 next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
-    
                 episode_reward += reward[0]
                 if done == True:
                     print("done!")
@@ -696,6 +695,7 @@ class Off_Policy_Agent():
             ep_trajectory.append((state, action, reward, next_state, mask))
 
             state = next_state
+            h_prev = h_current
 
             if done:
 
@@ -769,9 +769,8 @@ class Off_Policy_Agent():
                 h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
-    def update(self, done):
+    def update(self):
 
-        done = int(done)
         #Sample from replay memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = self.policy_memory.sample(self.policy_batch_size)
 
@@ -797,12 +796,8 @@ class Off_Policy_Agent():
 
         #Calculate target q using action sampled from policy and next state from batch
         with torch.no_grad():
-            next_action, next_log_prob, _, _, _ = self.actor.sample(next_state_batch, h0_actor,sampling = False, reparameterize = False)
-            next_log_prob = mask * next_log_prob
-            next_action = mask * next_action
+            next_action, next_log_prob, _, _, _ = self.actor.sample(next_state_batch, h0_actor)
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
-            qf1_next_target =  mask * qf1_next_target
-            qf2_next_target = mask * qf2_next_target
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
 
@@ -826,7 +821,7 @@ class Off_Policy_Agent():
         ##Policy Update##
         #Sample reparameterized actions from state batch
         
-        reparam_action, log_prob_batch, _, _, _ = self.actor.sample(state_batch, h0_actor, sampling = False, reparameterize = True)
+        reparam_action, log_prob_batch, _, _, _ = self.actor.sample(state_batch, h0_actor)
         reparam_action = mask * reparam_action
         log_prob_batch = mask * log_prob_batch
 

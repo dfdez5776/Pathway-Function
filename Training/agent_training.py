@@ -809,8 +809,8 @@ class Off_Policy_Agent():
         qf2 = mask * qf2
     
         #Calculate Critic loss (MSE(q and target))
-        qf1_loss = 0.5*F.mse_loss(qf1, target_q)
-        qf2_loss = 0.5*F.mse_loss(qf2, target_q)
+        qf1_loss = F.mse_loss(qf1, target_q)
+        qf2_loss = F.mse_loss(qf2, target_q)
         qf_loss = qf1_loss + qf2_loss
         
         #Take Gradient Steps for Q functions
@@ -854,11 +854,9 @@ class Off_Policy_Agent():
 
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
-
         
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), torch.sum(next_log_prob).item(), torch.sum(log_prob_batch).item()
 
-        
         '''
 
         #Older implementation of teh SAC algorithm with a seperate Value and Critic network

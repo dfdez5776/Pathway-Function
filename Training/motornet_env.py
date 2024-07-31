@@ -124,7 +124,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if episode % 2 == 0 :
             self.target = onp.array([-0.2, 0.55]) #[x,y]
         else:
-            self.target = onp.array([0.55, 0.55]) #[x,y]
+            self.target = onp.array([0.45, 0.55]) #[x,y]
 
         if self.task_version == "delay_task":
             self.targets_pos = onp.array([0.0, 0.0, 0.0, 0.0])

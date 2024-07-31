@@ -252,8 +252,11 @@ class RNN(nn.Module):
         mean = self.mean(x)
         
         
+        
+        
         log_std = self.std(x)
-        log_std = torch.clamp(log_std, min = -5, max = 2)  #between 0 and 1
+        log_std = torch.clamp(log_std, min = -5, max = -1.47)  #between 0 and 1
+
         
         
 
@@ -272,35 +275,28 @@ class RNN(nn.Module):
         log_std = log_std.reshape(-1, log_std.size()[-1])
         std = log_std.exp()
 
-        
-       
 
         probs = Normal(mean, std)
+        noise = probs.rsample()
 
-        
+        y_t = torch.tanh(noise) #* self.action_scale + self.action_bias  #bound between 0 and 1
+        action = y_t * self.action_scale + self.action_bias
 
-        if reparameterize:
-            actions = probs.rsample()
-        else:
-            actions = probs.sample()
-
-        action = torch.tanh(actions) * self.action_scale + self.action_bias  #bound between 0 and 1
-      
-
-        log_probs = probs.log_prob(actions)
-        log_probs -= torch.log(self.action_scale * (1-action.pow(2)) + self.epsilon)
-        log_probs = log_probs.sum(1, keepdim = True)
+        log_prob = probs.log_prob(noise)
+        log_prob -= torch.log(self.action_scale * (1-y_t.pow(2)) + self.epsilon)
+        log_prob = log_prob.sum(1, keepdim = True)
 
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias 
 
         if sampling == False:
             action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
-            log_probs = log_probs.reshape(log_std_size[0], log_std_size[1], 1) 
+            log_prob = log_prob.reshape(log_std_size[0], log_std_size[1], 1) 
             mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
 
-
-        return action, log_probs, mean, rnn_out, hn
+    
+       
+        return action, log_prob, mean, rnn_out, hn
    
 ########## SINGLE RNN MODEL ##########
 

@@ -186,7 +186,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         #Extract states       
         self.joints = onp.array(state_dict.get("joint").squeeze())  
         self.activation = onp.array(state_dict.get("activation"))
-   
+       
        
 
         #Extract hand pos for reward

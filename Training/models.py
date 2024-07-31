@@ -177,22 +177,15 @@ class RNN_MultiRegional(nn.Module):
         
         mean, log_std, rnn_out, hn = self.forward(state, hn)
 
-        mean = mean.reshape(-1, mean.size()[-1])
-        log_std = log_std.reshape(-1, log_std.size()[-1])
         std = log_std.exp()
-
-
+       
         normal = Normal(mean, std)
+        noise = normal.rsample()
 
-        if reparameterize == True:
-            x_t = normal.rsample()
-        if reparameterize == False:
-            x_t = normal.sample()  #Changed to include reparameterization only whenu pdating policy 
-
-        y_t = torch.tanh(x_t)
+        y_t = torch.tanh(noise)
         
         action = y_t * self.action_scale + self.action_bias
-        log_prob = normal.log_prob(x_t)
+        log_prob = normal.log_prob(noise)
 
         # Enforce the action_bounds
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)

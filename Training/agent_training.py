@@ -676,7 +676,7 @@ class Off_Policy_Agent():
 
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
-                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy = self.update() #grad_vis_actor, grad_vis_critic
+                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy, grad_vis_actor, grad_vis_critic = self.update(grad_vis_actor, grad_vis_critic) #grad_vis_actor, grad_vis_critic
                     critic_losses.append(critic_loss)
                     if t % 100 == 0:
                         print(critic_loss)
@@ -735,13 +735,6 @@ class Off_Policy_Agent():
 
                 #update gradient log
 
-                for name, param in self.actor.named_parameters():
-                    norm_grad = np.array(torch.norm(param).detach())
-                    grad_vis_actor[f'{name}'].append(norm_grad) 
-
-                for name, param in self.critic.named_parameters():
-                    norm_grad = np.array(torch.norm(param).detach())
-                    grad_vis_critic[f'{name}'].append(norm_grad)
 
 
                 Statistics["mean_episode_rewards"].append(mean_episode_reward)
@@ -771,7 +764,7 @@ class Off_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes % 10 == 0: #save graphs every 3000 episodes
+                if total_episodes > 2300: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
@@ -787,7 +780,7 @@ class Off_Policy_Agent():
                 h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
-    def update(self):
+    def update(self, grad_vis_actor, grad_vis_critic):
 
         #Sample from replay memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = self.policy_memory.sample(self.policy_batch_size)
@@ -834,6 +827,9 @@ class Off_Policy_Agent():
         #Take Gradient Steps for Q functions
         self.critic_optimizer.zero_grad()
         qf_loss.backward()
+        for name, param in self.critic.named_parameters():
+            norm_grad = np.array(torch.norm(param).detach().cpu())
+            grad_vis_critic[f'{name}'].append(norm_grad)
         nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
@@ -857,6 +853,10 @@ class Off_Policy_Agent():
         #Policy Gradient Step
         self.actor_optimizer.zero_grad()
         policy_loss.backward()
+        for name, param in self.actor.named_parameters():
+            norm_grad = np.array(torch.norm(param).detach().cpu())
+            grad_vis_actor[f'{name}'].append(norm_grad) 
+
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
@@ -875,7 +875,7 @@ class Off_Policy_Agent():
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
         
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), torch.sum(next_log_prob).item(), torch.sum(log_prob_batch).item()
+        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), torch.sum(next_log_prob).item(), torch.sum(log_prob_batch).item(), grad_vis_actor, grad_vis_critic
 
         '''
 

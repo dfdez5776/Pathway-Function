@@ -38,11 +38,7 @@ def average_reward_vis(reward_save_path, vis_save_path):
     else:
         vis_save_path = f'{vis_save_path}_average.png'
         plt.savefig(vis_save_path)
-        
-    
-
-
-
+     
 
 def interval_reward_vis(reward_save_path, vis_save_path):
      
@@ -51,14 +47,10 @@ def interval_reward_vis(reward_save_path, vis_save_path):
         data0 = np.load(reward_save_path, allow_pickle=True)
         data = data0.item()
     
-
-
-    
     steps = np.array(data.get('all_episode_steps'))
     reward_array = np.array(data.get('all_episode_rewards'))
     num_episodes = np.size(reward_array)
     
-
     #initialize counter and tuple of interval averages
     i = 0
     interval = 100 #size of intervals to take average over

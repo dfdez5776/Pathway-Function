@@ -167,7 +167,7 @@ class RNN_MultiRegional(nn.Module):
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.m1_mask)
         std_out = self.std_linear(rnn_out * self.m1_mask)
-        std_out = torch.clamp(std_out, min = -5, max = 10)
+        std_out = torch.clamp(std_out, min = -20, max = 10)
     
         return mean_out, std_out, rnn_out, hn_last
     
@@ -218,26 +218,21 @@ class RNN(nn.Module):
 
         self.epsilon = 1e-4
 
+        self.initialize_weights()
+
 
     def forward(self, state, h_prev):
         
         x =  F.relu(self.f1(state))
 
-        #x = pack_padded_sequence(x, len_seq, batch_first = True, enforce_sorted = False)
-
         x, hn_next = self.gru(x, h_prev)
-
-        #if sampling == False:
-        #    x, len_x_seq = pad_packed_sequence(x, batch_first = True)
-
-        #if sampling == True:
-        #    x = x.squeeze(1)
 
         x = F.relu(self.f2(x))
 
         mean = self.mean(x)
+
         log_std = self.std(x)
-        log_std = torch.clamp(log_std, min = -5, max = 1)  #between 0 and 1
+        log_std = torch.clamp(log_std, min = -20, max = 1)  #between 0 and 1
 
         return mean, log_std, x, hn_next
 
@@ -247,6 +242,9 @@ class RNN(nn.Module):
         mean, log_std, rnn_out, hn = self.forward(state, h_prev)
 
         std = log_std.exp()
+
+        print(mean)
+        print(std)
 
         probs = Normal(mean, std)
         noise = probs.rsample()
@@ -261,6 +259,15 @@ class RNN(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias 
        
         return action, log_prob, mean, rnn_out, hn
+    
+    def initialize_weights(self):
+        for name, params in self.gru.named_parameters():
+            print(name, params) 
+
+
+
+        #for params in self params
+            #apply nn Xavier init to the params
    
 ########## SINGLE RNN MODEL ##########
 

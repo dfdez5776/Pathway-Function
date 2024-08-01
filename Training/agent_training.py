@@ -568,7 +568,7 @@ class Off_Policy_Agent():
 
         #initialize Actor/Critic RNNs 
         
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
 
         self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
@@ -662,7 +662,7 @@ class Off_Policy_Agent():
         grad_vis_actor = {}
         grad_vis_critic = {}
 
-        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim*5), device = self.device )
+        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
@@ -766,7 +766,7 @@ class Off_Policy_Agent():
                 
                 ep_trajectory = []
 
-                h_prev = torch.zeros(size = (1 ,1, self.hid_dim*5), device = self.device)
+                h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
     def update(self):
@@ -788,7 +788,7 @@ class Off_Policy_Agent():
         mask_batch = torch.add(torch.mul(mask_batch, -1), 1)
 
         #Activites for sampling
-        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim*5)).to(self.device)
+        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 
@@ -797,9 +797,6 @@ class Off_Policy_Agent():
         #Calculate target q using action sampled from policy and next state from batch
         with torch.no_grad():
             next_action, next_log_prob, _, _, _ = self.actor.sample(next_state_batch, h0_actor)
-            print(next_state_batch.shape)
-            print(next_action.shape)
-            print(h0_critic.shape)
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
@@ -819,6 +816,7 @@ class Off_Policy_Agent():
         #Take Gradient Steps for Q functions
         self.critic_optimizer.zero_grad()
         qf_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
         ##Policy Update##
@@ -841,6 +839,7 @@ class Off_Policy_Agent():
         #Policy Gradient Step
         self.actor_optimizer.zero_grad()
         policy_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
         #Automatic Entropy Tuning

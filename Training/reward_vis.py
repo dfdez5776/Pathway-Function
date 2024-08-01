@@ -127,13 +127,9 @@ def gradient_vis(reward_save_path, vis_save_path):
 
 def loss_vis(reward_save_path, vis_save_path):
 
-  
-    
-
     if type(reward_save_path) == str:
         data0 = np.load(reward_save_path, allow_pickle=True)
         data = data0.item()
-    
     
     actor_loss = data["actor_loss"]
     critic_loss = data["critic_loss"]
@@ -141,13 +137,10 @@ def loss_vis(reward_save_path, vis_save_path):
     sampled_entropies = data["sampled_entropies"]
     batch_entropies = data["batch_entropies"]
 
-    
-    
     actor_loss_vis = plt.figure()
     plt.plot(range(1, len(actor_loss)+1), actor_loss)
     plt.suptitle('Actor Loss')
 
-    
     if __name__ == "__main__":
         plt.show()
     else:
@@ -168,19 +161,19 @@ def loss_vis(reward_save_path, vis_save_path):
         plt.savefig(vis_save_path1)
 
 
-    entropy_loss_vis = plt.figure()
-    plt.plot(range(1, len(sampled_entropies)+1), sampled_entropies, label = "sampled_entropies")
-    plt.plot(range(1, len(batch_entropies)+1), batch_entropies, label = "batch entropies")
-    plt.legend()
-    plt.suptitle('Entropy Loss')
+    #entropy_loss_vis = plt.figure()
+    #plt.plot(range(1, len(sampled_entropies)+1), sampled_entropies, label = "sampled_entropies")
+    #plt.plot(range(1, len(batch_entropies)+1), batch_entropies, label = "batch entropies")
+    #plt.legend()
+    #plt.suptitle('Entropy Loss')
 
 
     
-    if __name__ == "__main__":
-        plt.show()
-    else:
-        vis_save_path2 = f'{vis_save_path}_entropy_loss.png'
-        plt.savefig(vis_save_path2)
+    #if __name__ == "__main__":
+    #    plt.show()
+    #else:
+    #    vis_save_path2 = f'{vis_save_path}_entropy_loss.png'
+    #    plt.savefig(vis_save_path2)
 
 
     

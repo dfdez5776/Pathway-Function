@@ -662,6 +662,13 @@ class Off_Policy_Agent():
         grad_vis_actor = {}
         grad_vis_critic = {}
 
+
+        for name, param in self.actor.named_parameters():
+            grad_vis_actor[f'{name}'] = []
+
+        for name, param in self.critic.named_parameters():
+            grad_vis_critic[f'{name}'] = []
+
         h_prev = torch.zeros(size = (1 ,1 , self.hid_dim), device = self.device )
 
         #Episode Training Loop
@@ -671,6 +678,8 @@ class Off_Policy_Agent():
                 for _ in range(self.policy_batch_iters):
                     critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy = self.update() #grad_vis_actor, grad_vis_critic
                     critic_losses.append(critic_loss)
+                    if t % 100 == 0:
+                        print(critic_loss)
                     critic_target_losses.append(critic_target_loss)
                     actor_losses.append(policy_loss)
                     sampled_entropies.append(sampled_entropy)
@@ -703,9 +712,6 @@ class Off_Policy_Agent():
                 all_steps.append(episode_steps)
                 all_reward.append(episode_reward)
 
-                #recording activity
-                activity_norm = float(torch.norm(h_prev))
-
                 #push to replay and update
                 self.policy_memory.push(ep_trajectory)
 
@@ -727,6 +733,17 @@ class Off_Policy_Agent():
 
                     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
 
+                #update gradient log
+
+                for name, param in self.actor.named_parameters():
+                    norm_grad = np.array(torch.norm(param).detach())
+                    grad_vis_actor[f'{name}'].append(norm_grad) 
+
+                for name, param in self.critic.named_parameters():
+                    norm_grad = np.array(torch.norm(param).detach())
+                    grad_vis_critic[f'{name}'].append(norm_grad)
+
+
                 Statistics["mean_episode_rewards"].append(mean_episode_reward)
                 Statistics["mean_episode_steps"].append(mean_episode_steps)
                 Statistics["best_mean_episode_rewards"].append(best_mean_episode_reward)
@@ -747,17 +764,18 @@ class Off_Policy_Agent():
                 print("best mean reward: %f" % best_mean_episode_reward)
                 sys.stdout.flush()
 
+
+
                 if total_episodes % self.log_steps == 0:
                     # Dump statistics to pickle
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes % 1000 == 0: #save graphs every 3000 episodes
+                if total_episodes % 10 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-
-                    #gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     #activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
                 #Reset lists and activity

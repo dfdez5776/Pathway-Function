@@ -151,8 +151,8 @@ def loss_vis(reward_save_path, vis_save_path):
     if __name__ == "__main__":
         plt.show()
     else:
-        vis_save_path = f'{vis_save_path}_actor_loss.png'
-        plt.savefig(vis_save_path) 
+        vis_save_path0 = f'{vis_save_path}_actor_loss.png'
+        plt.savefig(vis_save_path0) 
     
     critic_loss_vis = plt.figure()
     plt.plot(range(1, len(critic_loss)+1), critic_loss, label = "critic1 loss")
@@ -164,8 +164,8 @@ def loss_vis(reward_save_path, vis_save_path):
     if __name__ == "__main__":
         plt.show()
     else:
-        vis_save_path = f'{vis_save_path}_critic_loss.png'
-        plt.savefig(vis_save_path)
+        vis_save_path1 = f'{vis_save_path}_critic_loss.png'
+        plt.savefig(vis_save_path1)
 
 
     entropy_loss_vis = plt.figure()
@@ -179,8 +179,8 @@ def loss_vis(reward_save_path, vis_save_path):
     if __name__ == "__main__":
         plt.show()
     else:
-        vis_save_path = f'{vis_save_path}_entropy_loss.png'
-        plt.savefig(vis_save_path)
+        vis_save_path2 = f'{vis_save_path}_entropy_loss.png'
+        plt.savefig(vis_save_path2)
 
 
     

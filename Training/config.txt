@@ -20,7 +20,7 @@ load_model_checkpoint = "train"
 continue_training = "no"
 algorithm = "SAC"
 policy_replay_size = 10000
-policy_batch_size = 32
+policy_batch_size = 16
 policy_batch_iters = 1
 tau = 0.005
 automatic_entropy_tuning = True
@@ -28,6 +28,6 @@ alpha = 0.2
 task_version = "original"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/SAC/SAC_03"            
-reward_save_path = "training_reports/SAC/SAC_03"      
-vis_save_path = "visualization/SAC/SAC_03"      
+model_save_path = "checkpoints/SAC/SAC_07a"            
+reward_save_path = "training_reports/SAC/SAC_07a"      
+vis_save_path = "visualization/SAC/SAC_07a"      

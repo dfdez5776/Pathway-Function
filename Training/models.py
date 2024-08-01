@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.init as init
 import torch.optim as optim
 from torch.distributions import Normal
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
@@ -243,8 +244,8 @@ class RNN(nn.Module):
 
         std = log_std.exp()
 
-        print(mean)
-        print(std)
+        #print(mean)
+        #print(std)
 
         probs = Normal(mean, std)
         noise = probs.rsample()
@@ -261,8 +262,32 @@ class RNN(nn.Module):
         return action, log_prob, mean, rnn_out, hn
     
     def initialize_weights(self):
-        for name, params in self.gru.named_parameters():
-            print(name, params) 
+
+        #first layer
+        init.xavier_uniform_(self.f1.weight)
+        nn.init.constant_(self.f1.bias, 0)
+
+        #Second layer 
+        for name, param in self.gru.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0)
+            else:
+                init.xavier_uniform_(param)
+
+        #final layer
+        init.xavier_uniform_(self.f2.weight)
+        nn.init.constant_(self.f2.bias, 0)
+        
+        #mean layer
+        init.xavier_uniform_(self.mean.weight)
+        nn.init.constant_(self.mean.bias, 0)
+
+        #std layer
+        init.xavier_uniform_(self.std.weight)
+        nn.init.constant_(self.std.bias, 0)
+
+
+
 
 
 

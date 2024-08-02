@@ -626,10 +626,10 @@ class Off_Policy_Agent():
         if evaluate == True:
             _, _, action, rnn_out, h_current = self.actor.sample(state, h_prev)
 
-        mean = mean.squeeze()
-        std = std.squeeze()
+        mean = mean.squeeze().cpu().numpy()
+        std = std.squeeze().cpu().numpy()
 
-        return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), np.array(mean), np.array(std)
+        return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std
 
     def train(self, max_steps, load_model_checkpoint):
 
@@ -810,7 +810,7 @@ class Off_Policy_Agent():
         reward_batch = pad_sequence(reward_batch, batch_first=True).to(self.device)
         next_state_batch = pad_sequence(next_state_batch, batch_first=True).to(self.device)
         mask_batch = pad_sequence(mask_batch, batch_first=True).unsqueeze(-1).to(self.device)
-        mask_batch = torch.add(torch.mul(mask_batch, -1), 1)
+      
 
         #Activites for sampling
         h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
@@ -825,6 +825,8 @@ class Off_Policy_Agent():
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
+            target_q = mask * target_q
+            
 
         #Calculate q using batch state and batch action
         qf1, qf2 = self.critic(state_batch, action_batch, h0_critic)
@@ -889,7 +891,7 @@ class Off_Policy_Agent():
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
 
-        self.alpha_vis = self.alpha.detach().numpy()
+        self.alpha_vis = self.alpha.detach().cpu().numpy()
       
         #print(type(self.alpha_vis))
 

@@ -9,18 +9,13 @@ def average_reward_vis(reward_save_path, vis_save_path):
         data0 = np.load(reward_save_path, allow_pickle=True)
         data = data0.item()
     
-    
-    
     avg_steps = np.array(data.get('mean_episode_steps'))
     avg_reward = np.array(data.get('mean_episode_rewards'))
     steps = np.array(data.get('all_episode_steps'))
     reward = np.array(data.get('all_episode_rewards'))
 
-      
-    
     #Plot of Average Rewards
     num_episodes = np.size(steps)+1
-   
     x = np.arange(1, num_episodes)
 
     figure, subplot = plt.subplots(2)
@@ -30,9 +25,6 @@ def average_reward_vis(reward_save_path, vis_save_path):
     subplot[1].plot(x, avg_reward, color = 'blue', linewidth = .5)
     subplot[1].set_title('Average Reward')
 
-  
-    
-    
     if __name__ == "__main__":
         plt.show()
     else:
@@ -41,7 +33,6 @@ def average_reward_vis(reward_save_path, vis_save_path):
      
 
 def interval_reward_vis(reward_save_path, vis_save_path):
-     
 
     if type(reward_save_path) == str:
         data0 = np.load(reward_save_path, allow_pickle=True)
@@ -70,7 +61,6 @@ def interval_reward_vis(reward_save_path, vis_save_path):
     x0 = np.size(interval_averages_rew) + 1
     x = np.arange(1, x0)
     
-
     figure, subplot = plt.subplots(2)
     figure.suptitle('Average Rewards/Steps over Interval ( Sparse)')
     subplot[0].scatter(x, interval_averages_rew, color = 'black', linewidth = .5)
@@ -98,7 +88,6 @@ def gradient_vis(reward_save_path, vis_save_path):
     actor_gradients = data["actor_gradients"]
     critic_gradients = data["critic_gradients"]
     
-
     figure, subplot = plt.subplots(2)
     figure.suptitle('Gradients of Actor and Critic')
     for key, value in actor_gradients.items():
@@ -128,44 +117,55 @@ def loss_vis(reward_save_path, vis_save_path):
     critic_target_loss = data["critic_target_loss"]
     sampled_entropies = data["sampled_entropies"]
     batch_entropies = data["batch_entropies"]
+    alpha = data["alpha"]
 
-    actor_loss_vis = plt.figure()
-    plt.plot(range(1, len(actor_loss)+1), actor_loss)
-    plt.suptitle('Actor Loss')
+    print(alpha)
+
+
+    figure, subplot = plt.subplots(4)
+    subplot[0].plot(actor_loss, label = 'actor loss')
+    subplot[0].legend()
+    subplot[1].plot(critic_loss, label = 'critic loss')
+    subplot[1].legend()
+    subplot[2].plot(sampled_entropies, label = 'sampled entropies')
+    subplot[2].plot(batch_entropies, label = 'batch entropies')
+    subplot[2].legend()
+    subplot[3].plot(alpha, label = 'alpha')
+    subplot[3].legend()
 
     if __name__ == "__main__":
         plt.show()
     else:
-        vis_save_path0 = f'{vis_save_path}_actor_loss.png'
+        vis_save_path0 = f'{vis_save_path}_loss.png'
         plt.savefig(vis_save_path0) 
-    
-    critic_loss_vis = plt.figure()
-    plt.plot(range(1, len(critic_loss)+1), critic_loss, label = "critic1 loss")
-    plt.plot(range(1, len(critic_target_loss)+1), critic_target_loss, label = "critic 2 loss")
-    plt.legend()
-    plt.suptitle('Critic Loss')
+
+def mean_std_vis(reward_save_path, vis_save_path):
+
+    if type(reward_save_path ==  str):
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data  = data0.item()
+
+    mean = data['mean']
+    std = data['std']
+
+    figure, subplot = plt.subplots(2)
+    subplot[0].plot(mean, label = 'mean')
+    subplot[0].legend()
+    subplot[1].plot(std, label = 'std')
+    subplot[1].legend()
 
 
+
+        
     if __name__ == "__main__":
         plt.show()
-    else:
-        vis_save_path1 = f'{vis_save_path}_critic_loss.png'
-        plt.savefig(vis_save_path1)
+    else:  
+        vis_save_path = f'{vis_save_path}_mean_std.png'
+        plt.savefig(vis_save_path)
 
+    #load in data like before
 
-    #entropy_loss_vis = plt.figure()
-    #plt.plot(range(1, len(sampled_entropies)+1), sampled_entropies, label = "sampled_entropies")
-    #plt.plot(range(1, len(batch_entropies)+1), batch_entropies, label = "batch entropies")
-    #plt.legend()
-    #plt.suptitle('Entropy Loss')
-
-
-    
-    #if __name__ == "__main__":
-    #    plt.show()
-    #else:
-    #    vis_save_path2 = f'{vis_save_path}_entropy_loss.png'
-    #    plt.savefig(vis_save_path2)
+    #make two subplots, one for mean and one for std
 
 
     

@@ -264,7 +264,7 @@ class RNN(nn.Module):
     def initialize_weights(self):
 
         #first layer
-        init.xavier_uniform_(self.f1.weight)
+        init.xavier_normal_(self.f1.weight)
         nn.init.constant_(self.f1.bias, 0)
 
         #Second layer 
@@ -272,18 +272,18 @@ class RNN(nn.Module):
             if 'bias' in name:
                 nn.init.constant_(param, 0)
             else:
-                init.xavier_uniform_(param)
+                init.xavier_normal_(param)
 
         #final layer
-        init.xavier_uniform_(self.f2.weight)
+        init.xavier_normal_(self.f2.weight)
         nn.init.constant_(self.f2.bias, 0)
         
         #mean layer
-        init.xavier_uniform_(self.mean.weight)
+        init.xavier_normal_(self.mean.weight)
         nn.init.constant_(self.mean.bias, 0)
 
         #std layer
-        init.xavier_uniform_(self.std.weight)
+        init.xavier_normal_(self.std.weight)
         nn.init.constant_(self.std.bias, 0)
 
 

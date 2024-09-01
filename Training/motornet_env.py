@@ -340,7 +340,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         return onp.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
     def close(self):
-        # print('close')
         if self.viewer:
             self.viewer.close()
             self.viewer = None

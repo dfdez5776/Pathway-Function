@@ -561,6 +561,7 @@ class Off_Policy_Agent():
         self.vis_save_path = vis_save_path
         self.action_scale = action_scale
         self.action_bias = action_bias
+        self.automatic_entropy_tuning = False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.policy_memory = PolicyReplayBuffer(self.policy_replay_size, self.seed)
@@ -569,7 +570,7 @@ class Off_Policy_Agent():
 
         #initialize Actor/Critic RNNs 
         
-        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
 
         self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
@@ -597,10 +598,11 @@ class Off_Policy_Agent():
         #update critics and their targets
         self.hard_update(self.target_critic, self.critic)
 
-        self.automatic_entropy_tuning = automatic_entropy_tuning
+        
 
         #target entropy = - dim(action)
-        if automatic_entropy_tuning:
+        if self.automatic_entropy_tuning:
+            print("using automatic entropy tuning")
             self.target_entropy = -torch.prod(torch.Tensor(self.action_dim).to(self.device)).item()
             self.log_alpha = torch.zeros(1, requires_grad = True, device = self.device)
             self.alpha_optim = Adam([self.log_alpha], lr = self.lr)
@@ -686,11 +688,10 @@ class Off_Policy_Agent():
                     critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy, grad_vis_actor, grad_vis_critic = self.update(grad_vis_actor, grad_vis_critic) #grad_vis_actor, grad_vis_critic
                     critic_losses.append(critic_loss)
                     if t % 100 == 0:
-                        print(critic_loss)
-                    critic_target_losses.append(critic_target_loss)
-                    actor_losses.append(policy_loss)
-                    sampled_entropies.append(sampled_entropy)
-                    batch_entropies.append(batch_entropy)
+                        critic_target_losses.append(critic_target_loss)
+                        actor_losses.append(policy_loss)
+                        sampled_entropies.append(sampled_entropy)
+                        batch_entropies.append(batch_entropy)
             
 
             with torch.no_grad():   
@@ -776,7 +777,7 @@ class Off_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes > 2000 and total_episodes % 100 == 0: #save graphs every 3000 episodes
+                if total_episodes % 1000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     #interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
@@ -826,7 +827,7 @@ class Off_Policy_Agent():
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
             target_q = mask * target_q
-            
+
 
         #Calculate q using batch state and batch action
         qf1, qf2 = self.critic(state_batch, action_batch, h0_critic)
@@ -891,7 +892,7 @@ class Off_Policy_Agent():
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
 
-        self.alpha_vis = self.alpha.detach().cpu().numpy()
+        #self.alpha_vis = self.alpha.detach().cpu().numpy()
       
         #print(type(self.alpha_vis))
 

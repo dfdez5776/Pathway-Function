@@ -244,8 +244,7 @@ class RNN(nn.Module):
 
         std = log_std.exp()
 
-        #print(mean)
-        #print(std)
+       
 
         probs = Normal(mean, std)
         noise = probs.rsample()

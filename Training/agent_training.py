@@ -678,7 +678,7 @@ class Off_Policy_Agent():
         for name, param in self.critic.named_parameters():
             grad_vis_critic[f'{name}'] = []
 
-        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim), device = self.device )
+        h_prev = torch.zeros(size = (1 ,1 , 5*self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
@@ -792,7 +792,7 @@ class Off_Policy_Agent():
                 
                 ep_trajectory = []
 
-                h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
+                h_prev = torch.zeros(size = (1 ,1, 5*self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
     def update(self, grad_vis_actor, grad_vis_critic):
@@ -814,7 +814,7 @@ class Off_Policy_Agent():
       
 
         #Activites for sampling
-        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
+        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 5*self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 

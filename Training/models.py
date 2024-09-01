@@ -195,7 +195,7 @@ class RNN_MultiRegional(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
 
 
-        return action, log_prob, mean, rnn_out, hn
+        return action, log_prob, mean, rnn_out, hn, std
 #Vanilla RNN for testing
 
 

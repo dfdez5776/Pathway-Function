@@ -14,9 +14,9 @@ frame_skips = 2
 action_scale = 0.5
 action_bias = 0.5
 max_steps = 1000000
-render_mode = "human"
+render_mode = "rgb_array"
 save_iter = 10
-load_model_checkpoint = "test"
+load_model_checkpoint = "train"
 continue_training = "no"
 algorithm = "SAC"
 policy_replay_size = 10000
@@ -28,6 +28,6 @@ alpha = 0.2
 task_version = "original"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/SAC/SAC_09"            
-reward_save_path = "training_reports/SAC/SAC_09"      
-vis_save_path = "visualization/SAC/SAC_09"      
+model_save_path = "checkpoints/SAC/SAC_3regions"            
+reward_save_path = "training_reports/SAC/SAC_3regions"      
+vis_save_path = "visualization/SAC/SAC_3regions"      

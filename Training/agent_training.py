@@ -536,7 +536,8 @@ class Off_Policy_Agent():
                  action_scale,
                  action_bias,
                  automatic_entropy_tuning,
-                 continue_training):
+                 continue_training,
+                 load_model_checkpoint):
         
 
         self.policy_replay_size = policy_replay_size
@@ -563,6 +564,7 @@ class Off_Policy_Agent():
         self.action_bias = action_bias
         self.automatic_entropy_tuning = False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.load_model_checkpoint = load_model_checkpoint
 
         self.policy_memory = PolicyReplayBuffer(self.policy_replay_size, self.seed)
 
@@ -570,7 +572,7 @@ class Off_Policy_Agent():
 
         #initialize Actor/Critic RNNs 
         
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
+        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.load_model_checkpoint).to(self.device)
 
         self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
@@ -623,7 +625,7 @@ class Off_Policy_Agent():
 
         #For training
         if evaluate == False:
-            action, _, mean, rnn_out, h_current, std = self.actor.sample(state, h_prev)
+            action, _, mean, rnn_out, h_current, std = self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
             mean = mean.squeeze().cpu().numpy()
             std = std.squeeze().cpu().numpy()
             return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
@@ -750,7 +752,7 @@ class Off_Policy_Agent():
             
 
             with torch.no_grad():   
-                action, h_current, _, mean, std = self.select_action(state, h_prev, evaluate = False)
+                action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
           
                 
 
@@ -835,9 +837,9 @@ class Off_Policy_Agent():
                 if total_episodes % 1000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
                     #interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    mean_std_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
+                    #mean_std_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
                     #activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 

@@ -12,7 +12,7 @@ from reward_vis import activity_vis
 ######### MULTIREGIONAL MODEL ##########
 
 class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device, load_model_checkpoint):
         super(RNN_MultiRegional, self).__init__()
 
         '''
@@ -31,12 +31,13 @@ class RNN_MultiRegional(nn.Module):
         self.action_scale = action_scale 
         self.action_bias = action_bias
         self.device = device
+        self.load_model_checkpoint = load_model_checkpoint
 
         # Masks for individual regions
-        self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.zeros(size=(hid_dim,))]).to(device)
+        self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.ones(size=(hid_dim,))]).to(device)
         self.thal_mask = torch.cat([torch.zeros(size=(hid_dim*3,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
         self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
-        self.m2_thal_str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim)), torch.ones(size=(hid_dim,))])
+        self.m1_thal_str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
         self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
 
         # Inhibitory Connections
@@ -166,10 +167,10 @@ class RNN_MultiRegional(nn.Module):
 
         # Loop through RNN
         for t in range(size):
-
-            self.get_activation(hn_next, iteration, iteration0)
+            if self.load_model_checkpoint == "test":
+                self.get_activation(hn_next, iteration, iteration0)
             
-            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ inp_weight * self.thal_mask)))
+            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ inp_weight * self.m1_thal_str_mask)))
             new_hs.append(hn_next)
 
         # Collect hidden states

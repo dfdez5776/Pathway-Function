@@ -56,7 +56,8 @@ def main():
                                     args.action_scale,
                                     args.action_bias,
                                     args.automatic_entropy_tuning,
-                                    args.continue_training )
+                                    args.continue_training,
+                                    args.load_model_checkpoint )
     else:
         rl_setup = On_Policy_Agent(env,
                                 args.seed,

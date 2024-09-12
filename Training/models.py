@@ -7,6 +7,7 @@ from torch.distributions import Normal
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import numpy as np
 import math
+from reward_vis import activity_vis
 
 ######### MULTIREGIONAL MODEL ##########
 
@@ -117,7 +118,12 @@ class RNN_MultiRegional(nn.Module):
         # Time constants for networks
         self.t_const = 0.1
 
-    def forward(self, inp, hn):
+        self.activity_dict = {'d1 right reach' : [],
+                              'd2 right reach' : [],
+                              'd1 left reach' : [],
+                              'd2 left reach' : []}
+
+    def forward(self, inp, hn, iteration, iteration0):
 
         '''
             Forward pass through the model
@@ -155,9 +161,13 @@ class RNN_MultiRegional(nn.Module):
         W_thal = torch.cat([self.zeros, self.zeros, snr2thal_rec, self.zeros, m12thal_rec], dim=1)              # Thal
         W_m1 = torch.cat([self.zeros, self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
         W_rec = torch.cat([W_str, W_stn, W_snr, W_thal, W_m1], dim=0)
+        
 
         # Loop through RNN
         for t in range(size):
+
+            self.get_activation(hn_next, iteration, iteration0)
+            
             hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ inp_weight * self.thal_mask)))
             new_hs.append(hn_next)
 
@@ -169,17 +179,52 @@ class RNN_MultiRegional(nn.Module):
         mean_out = self.mean_linear(rnn_out * self.m1_mask)
         std_out = self.std_linear(rnn_out * self.m1_mask)
         std_out = torch.clamp(std_out, min = -20, max = 10)
+
+        
     
         return mean_out, std_out, rnn_out, hn_last
     
-    def sample(self, state, hn, reparameterize = True):
+    def get_activation(self, hn_next, iteration, iteration0):
+        #not sure what index to use and also some of the hn_nexts are just 0?
+        
+        if iteration == iteration0 or iteration == iteration0 + 1: 
+          
+            if iteration%2 == 1:
+            #calculate activations
+                d1_activation = torch.norm(hn_next[:, 0:128])
+                d2_activation = torch.norm(hn_next[:, 128:256])
+                self.activity_dict['d1 right reach'].append(d1_activation)
+                self.activity_dict['d2 right reach'].append(d2_activation)
+            elif iteration%2 == 0:
+            #calculate activations
+                d1_activation = torch.norm(hn_next[:, 0:128])
+                d2_activation = torch.norm(hn_next[:, 128:256])
+                self.activity_dict['d1 left reach'].append(d1_activation)
+                self.activity_dict['d2 left reach'].append(d2_activation)
+
+            
+
+            
+
+
+               
+
+  
+            
+
+        
+
+
+
+        
+    
+    def sample(self, state, hn, iteration, iteration0, reparameterize = True):
 
         epsilon = 1e-4    
         
-        mean, log_std, rnn_out, hn = self.forward(state, hn)
+        mean, log_std, rnn_out, hn = self.forward(state, hn, iteration, iteration0)
 
         std = log_std.exp()
-       
         normal = Normal(mean, std)
         noise = normal.rsample()
 
@@ -195,7 +240,7 @@ class RNN_MultiRegional(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
 
 
-        return action, log_prob, mean, rnn_out, hn, std
+        return action, log_prob, mean, rnn_out, hn, std, self.activity_dict
 #Vanilla RNN for testing
 
 
@@ -238,7 +283,9 @@ class RNN(nn.Module):
         return mean, log_std, x, hn_next
 
 
-    def sample(self, state, h_prev):
+    def sample(self, state, h_prev, iteration, iteration0):
+
+        activity_dict = {}
 
         mean, log_std, rnn_out, hn = self.forward(state, h_prev)
 
@@ -258,7 +305,7 @@ class RNN(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias 
        
-        return action, log_prob, mean, rnn_out, hn, std
+        return action, log_prob, mean, rnn_out, hn, std, activity_dict
     
     def initialize_weights(self):
 

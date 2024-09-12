@@ -591,12 +591,13 @@ class Off_Policy_Agent():
             self.target_critic.load_state_dict(checkpoint['target_critic_state_dict'])
 
             #load in optimizers 
-            self.actor.optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
+            self.actor_optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
 
-            self.critic.optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
 
         #update critics and their targets
-        self.hard_update(self.target_critic, self.critic)
+        if continue_training != "yes":
+            self.hard_update(self.target_critic, self.critic)
 
         
 
@@ -615,7 +616,7 @@ class Off_Policy_Agent():
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def select_action(self, state, h_prev, evaluate):
+    def select_action(self, state, h_prev,iteration , iteration0, evaluate):
         
         state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
         h_prev = h_prev.to(self.device)
@@ -623,15 +624,69 @@ class Off_Policy_Agent():
         #For training
         if evaluate == False:
             action, _, mean, rnn_out, h_current, std = self.actor.sample(state, h_prev)
-            
+            mean = mean.squeeze().cpu().numpy()
+            std = std.squeeze().cpu().numpy()
+            return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
+        
         #For testing
         if evaluate == True:
-            _, _, action, rnn_out, h_current = self.actor.sample(state, h_prev)
+            _, _, action, rnn_out, h_current, std, activity_dict = self.actor.sample(state, h_prev, iteration, iteration0)
+            return action, h_current, activity_dict
+        
 
-        mean = mean.squeeze().cpu().numpy()
-        std = std.squeeze().cpu().numpy()
+        
 
-        return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std
+
+    def test(self, max_steps):
+        
+        checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
+        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device) #change to self actor
+        self.actor.load_state_dict(checkpoint['agent_state_dict'])
+
+        iteration = checkpoint['iteration']
+        iteration0 = iteration
+
+        #Initializing...
+        state = self.env.reset(iteration)
+        h_prev = torch.zeros(size=(1 ,1 , self.hid_dim), device = self.device)
+        num_episodes = 0
+        episode_steps = 0 
+        episode_reward = 0 
+
+        #run episode as usual in train but without the update
+        while iteration < max_steps:
+
+            with torch.no_grad():
+                action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
+            
+            for _ in range(self.frame_skips):
+
+                episode_steps += 1
+                next_state, reward, done = self.env.step(episode_steps, action)
+                episode_reward += reward[0]
+                if done == True:
+                    print("done!")
+                    break
+                
+            state = next_state
+            h_prev = h_current
+
+            if done:
+                print("episode steps", episode_steps)
+
+                iteration += 1
+                state = self.env.reset(iteration)
+
+                h_prev = torch.zeros(size = (1 , 1, self.hid_dim), device = self.device)
+                episode_reward = 0
+                episode_steps = 0 
+
+            #if iteration > iteration0 + 1:
+              #  activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path, activity_dict)
+
+
+
+
 
     def train(self, max_steps, load_model_checkpoint):
 

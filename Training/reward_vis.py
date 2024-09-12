@@ -174,29 +174,44 @@ def mean_std_vis(reward_save_path, vis_save_path):
 
 
 
-def activity_vis(reward_save_path, vis_save_path):
+def activity_vis(reward_save_path, vis_save_path, activity_dict):
 
-  
+    print(len(activity_dict['d1 right reach']))
     
 
-    if type(reward_save_path) == str:
-        data0 = np.load(reward_save_path, allow_pickle=True)
-        data = data0.item()
-    
-    
-    activity = data["activity_magnitude"]
-    print(activity)
-    
-    activity_vis = plt.figure()
-    plt.plot(range(1, len(activity)+1), activity)
-    plt.suptitle('Activity')
+    figure, subplot = plt.subplots(2)
+    figure.suptitle('D1 and D2 activity during Right reaches')
+    subplot[0].plot(activity_dict['d1 right reach'], color = 'red', linewidth = .5)  
+    subplot[0].set_title('D1')
+    subplot[1].plot(activity_dict['d2 right reach'], color = 'blue', linewidth = .5)
+    subplot[1].set_title('d2 right reach')
 
     
-    if __name__ == "__main__":
-        plt.show()
-    else:
-        vis_save_path = f'{vis_save_path}_activity.png'
-        plt.savefig(vis_save_path)
+    plt.show()
+
+    figure, subplot = plt.subplots(2)
+    figure.suptitle('D1 and D2 activity during Left reach')
+    subplot[0].plot(activity_dict['d1 left reach'], color = 'red', linewidth = .5)  
+    subplot[0].set_title('D1')
+    subplot[1].plot(activity_dict['d2 left reach'], color = 'blue', linewidth = .5)
+    subplot[1].set_title('d2 left reach')
+
+    
+    plt.show()
+
+    #activity = data["activity_magnitude"]
+    #print(activity)
+    
+    #activity_vis = plt.figure()
+    #plt.plot(range(1, len(activity)+1), activity)
+    #plt.suptitle('Activity')
+
+    
+    #if __name__ == "__main__":
+    #    plt.show()
+    #else:
+    #    vis_save_path = f'{vis_save_path}_activity.png'
+    #    plt.savefig(vis_save_path)
 
 
 def test_PSTH(str_activity, thal_activity, motor_activity, length_Rtrial, length_Ltrial): 

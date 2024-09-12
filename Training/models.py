@@ -36,6 +36,7 @@ class RNN_MultiRegional(nn.Module):
         self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.zeros(size=(hid_dim,))]).to(device)
         self.thal_mask = torch.cat([torch.zeros(size=(hid_dim*3,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
         self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
+        self.m2_thal_str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim)), torch.ones(size=(hid_dim,))])
         self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
 
         # Inhibitory Connections

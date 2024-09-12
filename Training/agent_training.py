@@ -625,7 +625,7 @@ class Off_Policy_Agent():
 
         #For training
         if evaluate == False:
-            action, _, mean, rnn_out, h_current, std = self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
+            action, _, mean, rnn_out, h_current, std , _= self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
             mean = mean.squeeze().cpu().numpy()
             std = std.squeeze().cpu().numpy()
             return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
@@ -879,7 +879,7 @@ class Off_Policy_Agent():
 
         #Calculate target q using action sampled from policy and next state from batch
         with torch.no_grad():
-            next_action, next_log_prob, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor)
+            next_action, next_log_prob, _, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor, iteration = None, iteration0 = None)
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
@@ -910,7 +910,7 @@ class Off_Policy_Agent():
         ##Policy Update##
         #Sample reparameterized actions from state batch
         
-        reparam_action, log_prob_batch, _, _, _, _ = self.actor.sample(state_batch, h0_actor)
+        reparam_action, log_prob_batch, _, _, _, _, _ = self.actor.sample(state_batch, h0_actor, iteration = None, iteration0 = None)
         reparam_action = mask * reparam_action
         log_prob_batch = mask * log_prob_batch
 

@@ -5,14 +5,18 @@ import random
 from itertools import chain
 
 class PolicyReplayBuffer:
-    def __init__(self, capacity, seed):
+    def __init__(self, capacity, seed, replay = None):
         random.seed(seed)
         self.capacity = capacity
-        self.buffer = []
+        if replay is not None:
+            self.buffer = replay
+        else:
+            self.buffer = []
+
         self.position = 0
 
     def push(self, state):
-        if len(self.buffer) < self.capacity:  #why less than?
+        if len(self.buffer) < self.capacity: 
             self.buffer.append(None)
         self.buffer[self.position] = state
         self.position = (self.position + 1) % self.capacity 

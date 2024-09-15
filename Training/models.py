@@ -12,7 +12,7 @@ from reward_vis import activity_vis
 ######### MULTIREGIONAL MODEL ##########
 
 class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device, load_model_checkpoint):
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device, test_train):
         super(RNN_MultiRegional, self).__init__()
 
         '''
@@ -31,7 +31,7 @@ class RNN_MultiRegional(nn.Module):
         self.action_scale = action_scale 
         self.action_bias = action_bias
         self.device = device
-        self.load_model_checkpoint = load_model_checkpoint
+        self.test_train = test_train
 
         # Masks for individual regions
         self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.ones(size=(hid_dim,))]).to(device)
@@ -39,6 +39,25 @@ class RNN_MultiRegional(nn.Module):
         self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
         self.m1_thal_str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
         self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
+
+        #Tonic inputs
+        #str thal and motor cortex, give each like 0.5?
+        #str, stn, snr, thal, m1
+        self.str_tonic = torch.ones(size = (self.hid_dim,)).to(device)
+        self.stn_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
+        self.snr_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
+        self.thal_tonic = torch.ones(size = (self.hid_dim,)).to(device)
+        self.m1_tonic = torch.ones(size = (self.hid_dim,)).to(device)
+        
+        
+        self.tonic_inp = torch.cat([self.str_tonic,
+                                         self.stn_tonic,
+                                         self.snr_tonic,
+                                         self.thal_tonic,
+                                         self.m1_tonic])
+            
+        
+
 
         # Inhibitory Connections
         self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
@@ -167,10 +186,15 @@ class RNN_MultiRegional(nn.Module):
 
         # Loop through RNN
         for t in range(size):
-            if self.load_model_checkpoint == "test":
+            if self.test_train == "test":
                 self.get_activation(hn_next, iteration, iteration0)
             
-            hn_next = F.relu((1 - self.t_const) * hn_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ inp_weight * self.m1_thal_str_mask)))
+            hn_next = F.relu((1 - self.t_const) * hn_next
+                             + self.t_const * ((W_rec @ hn_next.T).T
+                             + (inp[:, t, :] @ inp_weight * self.m1_mask))
+                             + self.tonic_inp)
+            
+
             new_hs.append(hn_next)
 
         # Collect hidden states
@@ -203,22 +227,6 @@ class RNN_MultiRegional(nn.Module):
                 d2_activation = torch.norm(hn_next[:, 128:256])
                 self.activity_dict['d1 left reach'].append(d1_activation)
                 self.activity_dict['d2 left reach'].append(d2_activation)
-
-            
-
-            
-
-
-               
-
-  
-            
-
-        
-
-
-
-        
     
     def sample(self, state, hn, iteration, iteration0, reparameterize = True):
 

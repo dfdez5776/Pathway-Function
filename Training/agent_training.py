@@ -537,7 +537,7 @@ class Off_Policy_Agent():
                  action_bias,
                  automatic_entropy_tuning,
                  continue_training,
-                 load_model_checkpoint):
+                 test_train):
         
 
         self.policy_replay_size = policy_replay_size
@@ -564,7 +564,7 @@ class Off_Policy_Agent():
         self.action_bias = action_bias
         self.automatic_entropy_tuning = False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.load_model_checkpoint = load_model_checkpoint
+        self.test_train = test_train
 
         self.policy_memory = PolicyReplayBuffer(self.policy_replay_size, self.seed)
 
@@ -572,7 +572,7 @@ class Off_Policy_Agent():
 
         #initialize Actor/Critic RNNs 
         
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.load_model_checkpoint).to(self.device)
+        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.test_train).to(self.device)
 
         self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
@@ -596,6 +596,8 @@ class Off_Policy_Agent():
             self.actor_optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
 
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+
+            self.policy_memory = PolicyReplayBuffer(self.policy_replay_size, self.seed, checkpoint['policy_replay'])
 
         #update critics and their targets
         if continue_training != "yes":
@@ -690,7 +692,7 @@ class Off_Policy_Agent():
 
 
 
-    def train(self, max_steps, load_model_checkpoint):
+    def train(self, max_steps, test_train):
 
         #Initialize tracking statistics 
         Statistics = {'best_mean_episode_rewards' : [],
@@ -754,7 +756,6 @@ class Off_Policy_Agent():
             with torch.no_grad():   
                 action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
           
-                
 
             for _ in range(self.frame_skips):
                 episode_steps += 1
@@ -798,6 +799,7 @@ class Off_Policy_Agent():
                             'target_critic_state_dict': self.target_critic.state_dict(),
                             'agent_optimizer_state_dict': self.actor_optimizer.state_dict(),
                             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+                            'policy_replay': self.policy_memory.buffer
                         }, self.model_save_path + '.pth')
 
                     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)

@@ -114,6 +114,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if self.task_version == "original":  
             reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
             if euclidian_distance <= self.target_radius:
+                print("reached target!")
                 reward = 1
 
         return reward
@@ -158,7 +159,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
             return True
         return False  
         
-    def step(self, episode_steps, action, total_episodes):  ##pass in episode number
+    def step(self, episode_steps, action, total_episodes=0):  ##pass in episode number
         
 
         if self.task_version == "delay_task":
@@ -183,7 +184,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         #Extract states       
         self.joints = onp.array(state_dict.get("joint").squeeze())  
-        self.activation = onp.array(state_dict.get("activation"))
+        self.activation = onp.array(state_dict.get("activation")).squeeze()
        
        
 
@@ -195,10 +196,12 @@ class EffectorTwoLinkArmEnv(gym.Env):
         if self.task_version == "delay_task":
             self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
 
-
+        
         #for original task
         if self.task_version == "original":
             self.obs_state = onp.concatenate([self.target, self.joints, self.activation])
+
+        
 
 
         # Get reward

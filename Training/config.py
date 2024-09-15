@@ -104,7 +104,7 @@ def config_parser():
                         type=str, 
                         help='path to folder and file name to save visualizations (do not put extension .npy)')
     
-    parser.add_argument('--load_model_checkpoint', 
+    parser.add_argument('--test_train', 
                         type=str, 
                         default="no",
                         help='load in checkpoint or not to continue training')

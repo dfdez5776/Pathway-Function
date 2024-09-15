@@ -57,7 +57,7 @@ def main():
                                     args.action_bias,
                                     args.automatic_entropy_tuning,
                                     args.continue_training,
-                                    args.load_model_checkpoint )
+                                    args.test_train )
     else:
         rl_setup = On_Policy_Agent(env,
                                 args.seed,
@@ -76,7 +76,7 @@ def main():
                                 args.action_scale,
                                 args.action_bias)
     
-    if args.load_model_checkpoint == "test":
+    if args.test_train == "test":
         rl_setup.test(args.max_steps) 
     else:
         rl_setup.train(args.max_steps, args.continue_training)

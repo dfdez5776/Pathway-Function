@@ -1,0 +1,3 @@
+Model Training Log
+
+9/14 - added tonic input to str, alm, and thalamus. Training using SAC algorithm and constant alpha. Input into motor cortex only.git

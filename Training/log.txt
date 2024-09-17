@@ -1,3 +1,6 @@
 Model Training Log
 
 9/14 - added tonic input to str, alm, and thalamus. Training using SAC algorithm and constant alpha. Input into motor cortex only.git
+    Going to train to see how it performs with tonic input. Then will test the policy replay load in
+
+9/15 - continue training using buffer . Note: model saved in 9/14 but visualizations in 9/15

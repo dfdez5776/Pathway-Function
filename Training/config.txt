@@ -17,7 +17,7 @@ max_steps = 1000000
 render_mode = "rgb_array"
 save_iter = 10
 test_train = "train"
-continue_training = "no"
+continue_training = "yes"
 algorithm = "SAC"
 policy_replay_size = 10000
 policy_batch_size = 16
@@ -29,5 +29,5 @@ task_version = "original"
 
 ### MODEL SAVING ###
 model_save_path = "checkpoints/SAC/9_14"            
-reward_save_path = "training_reports/SAC/9_14"      
-vis_save_path = "visualization/SAC/9_14"      
+reward_save_path = "training_reports/SAC/9_15"      
+vis_save_path = "visualization/SAC/9_15"      

@@ -531,6 +531,7 @@ class Off_Policy_Agent():
                  log_steps,
                  frame_skips,
                  model_save_path,
+                 buffer_save_path,
                  reward_save_path,
                  vis_save_path,
                  action_scale,
@@ -558,6 +559,7 @@ class Off_Policy_Agent():
         self.log_steps = log_steps
         self.frame_skips = frame_skips
         self.model_save_path = model_save_path
+        self.buffer_save_path = buffer_save_path
         self.reward_save_path = reward_save_path
         self.vis_save_path = vis_save_path
         self.action_scale = action_scale
@@ -711,6 +713,8 @@ class Off_Policy_Agent():
                      'std': [], 
                      'alpha': []
                      }
+        
+        saved_buffer = []
 
         total_episodes = 0
         best_mean_episode_reward = -float("inf")
@@ -742,6 +746,8 @@ class Off_Policy_Agent():
         #Episode Training Loop
         for t in range(max_steps):
 
+            #add to replay buffer 
+
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
                     critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy, grad_vis_actor, grad_vis_critic = self.update(grad_vis_actor, grad_vis_critic) #grad_vis_actor, grad_vis_critic
@@ -759,7 +765,7 @@ class Off_Policy_Agent():
 
             for _ in range(self.frame_skips):
                 episode_steps += 1
-                next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
+                next_state, reward, done = self.env.step(episode_steps, action,h_current, total_episodes)
                 episode_reward += reward[0]
                 if done == True:
                     print("done!")

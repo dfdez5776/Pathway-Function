@@ -43,11 +43,11 @@ class RNN_MultiRegional(nn.Module):
         #Tonic inputs
         #str thal and motor cortex, give each like 0.5?
         #str, stn, snr, thal, m1
-        self.str_tonic = torch.ones(size = (self.hid_dim,)).to(device)
-        self.stn_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
-        self.snr_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
+        self.str_tonic = 0.1 * torch.ones(size = (self.hid_dim,)).to(device)
+        self.stn_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
+        self.snr_tonic = 0.3 * torch.ones(size = (self.hid_dim,)).to(device)
         self.thal_tonic = torch.ones(size = (self.hid_dim,)).to(device)
-        self.m1_tonic = torch.ones(size = (self.hid_dim,)).to(device)
+        self.m1_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
         
         
         self.tonic_inp = torch.cat([self.str_tonic,

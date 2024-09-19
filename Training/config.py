@@ -94,7 +94,10 @@ def config_parser():
                         type=str, 
                         default='',
                         help='path to folder and file name of model to save (do not put extension pth)')
-
+    parser.add_argument('--buffer_save_path', 
+                        type=str, 
+                        default='',
+                        help='path to save buffer replay list')
     parser.add_argument('--reward_save_path', 
                         type=str, 
                         default='',

@@ -80,7 +80,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
-    def reward(self, episode_steps, total_episodes):
+    def reward(self, episode_steps, total_episodes, hn):
               
         reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
@@ -111,11 +111,14 @@ class EffectorTwoLinkArmEnv(gym.Env):
               
         
 
-        if self.task_version == "original":  
-            reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
-            if euclidian_distance <= self.target_radius:
-                print("reached target!")
-                reward = 1
+        if self.task_version == "original": 
+            #if episode steps less than 100, reward = inverse of activity  
+            if episode_steps < 100:
+                reward = 1/(th.sum(hn) + 1e-10) # discourages activation
+            else:
+                reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
+                if euclidian_distance <= self.target_radius:
+                    reward = 1
 
         return reward
     
@@ -138,6 +141,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.joints = onp.array(state_dict.get("joint")).squeeze() #import from effector module instead
         self.activation = onp.array(state_dict.get("activation"))
 
+
         if self.task_version == "delay_task":
            
             self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
@@ -159,7 +163,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
             return True
         return False  
         
-    def step(self, episode_steps, action, total_episodes=0):  ##pass in episode number
+    def step(self, episode_steps, action, h_current, total_episodes=0):  ##pass in episode number
         
 
         if self.task_version == "delay_task":
@@ -177,7 +181,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
             #Integrate and get state
 
         #Take step in environment and integrate, default is Euler
-        self.two_link_arm.step(action)    
+        if episode_steps > 100: 
+            self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"
         state_dict = self.two_link_arm.states
@@ -185,7 +190,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         #Extract states       
         self.joints = onp.array(state_dict.get("joint").squeeze())  
         self.activation = onp.array(state_dict.get("activation")).squeeze()
-       
        
 
         #Extract hand pos for reward
@@ -205,7 +209,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
 
         # Get reward
-        reward = self.reward(episode_steps, total_episodes)
+        reward = self.reward(episode_steps, total_episodes, h_current)
 
         # Get done
         done = self.done(episode_steps)

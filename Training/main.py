@@ -51,6 +51,7 @@ def main():
                                     args.log_steps,
                                     args.frame_skips,
                                     args.model_save_path,
+                                    args.buffer_save_path,
                                     args.reward_save_path,
                                     args.vis_save_path,
                                     args.action_scale,

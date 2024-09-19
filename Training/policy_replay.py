@@ -8,10 +8,8 @@ class PolicyReplayBuffer:
     def __init__(self, capacity, seed, replay = None):
         random.seed(seed)
         self.capacity = capacity
-        if replay is not None:
-            self.buffer = replay
-        else:
-            self.buffer = []
+        
+        self.buffer = []
 
         self.position = 0
 

@@ -28,7 +28,8 @@ alpha = 0.2
 task_version = "original"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/SAC/9_18" 
-buffer_save_path = "checkpoints/SAC/buffer_9_18"          
-reward_save_path = "training_reports/SAC/9_18"      
-vis_save_path = "visualization/SAC/9_18"      
+model_save_path = "checkpoints/SAC/9_23" 
+buffer_save_path = "checkpoints/SAC/buffer_9_23"          
+reward_save_path = "training_reports/SAC/9_23"      
+vis_save_path = "visualization/SAC/9_23" 
+

@@ -113,8 +113,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         if self.task_version == "original": 
             #if episode steps less than 100, reward = inverse of activity  
-            if episode_steps < 100:
-                reward = 1/(th.sum(hn) + 1e-10) # discourages activation
+            if episode_steps < 50:
+                reward = 0 # discourages activation
             else:
                 reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
                 if euclidian_distance <= self.target_radius:
@@ -181,7 +181,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
             #Integrate and get state
 
         #Take step in environment and integrate, default is Euler
-        if episode_steps > 100: 
+        if episode_steps > 50: 
             self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"

@@ -4,3 +4,6 @@ Model Training Log
     Going to train to see how it performs with tonic input. Then will test the policy replay load in
 
 9/15 - continue training using buffer . Note: model saved in 9/14 but visualizations in 9/15
+
+9/23 Still having difficulties loading in buffer. 100 time step may be too long. try different update rule during that period to make 
+loss dependent on activity only.

@@ -599,7 +599,11 @@ class Off_Policy_Agent():
 
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
 
-            self.policy_memory = PolicyReplayBuffer(self.policy_replay_size, self.seed, checkpoint['policy_replay'])
+
+            #load in buffer
+            self.policy_memory.buffer = checkpoint['buffer']
+
+            
 
         #update critics and their targets
         if continue_training != "yes":
@@ -687,11 +691,6 @@ class Off_Policy_Agent():
                 episode_reward = 0
                 episode_steps = 0 
 
-            #if iteration > iteration0 + 1:
-              #  activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path, activity_dict)
-
-
-
 
 
     def train(self, max_steps, test_train):
@@ -714,7 +713,6 @@ class Off_Policy_Agent():
                      'alpha': []
                      }
         
-        saved_buffer = []
 
         total_episodes = 0
         best_mean_episode_reward = -float("inf")
@@ -750,14 +748,17 @@ class Off_Policy_Agent():
 
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
-                    critic_loss, critic_target_loss, policy_loss, sampled_entropy, batch_entropy, grad_vis_actor, grad_vis_critic = self.update(grad_vis_actor, grad_vis_critic) #grad_vis_actor, grad_vis_critic
-                    critic_losses.append(critic_loss)
-                    if t % 100 == 0:
-                        critic_target_losses.append(critic_target_loss)
-                        actor_losses.append(policy_loss)
-                        sampled_entropies.append(sampled_entropy)
-                        batch_entropies.append(batch_entropy)
-            
+                    #update to minimize activity
+                    if episode_steps > 1 and episode_steps < 51:
+                        policy_loss = self.delay_update(h_prev)
+                        #visualize activity
+                        if episode_steps == 50:
+                            print(policy_loss)
+                    
+                    #update
+                    self.update() #grad_vis_actor, grad_vis_critic
+
+           
 
             with torch.no_grad():   
                 action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
@@ -777,6 +778,7 @@ class Off_Policy_Agent():
 
             state = next_state
             h_prev = h_current
+            
 
             Statistics["mean"].append(mean)
             Statistics["std"].append(std)
@@ -797,7 +799,7 @@ class Off_Policy_Agent():
                 if len(all_steps) > 0:
                     mean_episode_steps = np.mean(np.array(all_steps)[-1000:])
                 if len(all_reward) > 10:
-                    if total_episodes % 500 == 0: #save params every 500 episodes
+                    if total_episodes % 20 == 0: #save params every 500 episodes
                         torch.save({
                             'iteration': t,
                             'agent_state_dict': self.actor.state_dict(),
@@ -805,14 +807,14 @@ class Off_Policy_Agent():
                             'target_critic_state_dict': self.target_critic.state_dict(),
                             'agent_optimizer_state_dict': self.actor_optimizer.state_dict(),
                             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
-                            'policy_replay': self.policy_memory.buffer
+                            'buffer' : self.policy_memory.buffer
                         }, self.model_save_path + '.pth')
+
+                        
 
                     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
 
                 #update gradient log
-
-
 
                 Statistics["mean_episode_rewards"].append(mean_episode_reward)
                 Statistics["mean_episode_steps"].append(mean_episode_steps)
@@ -844,12 +846,6 @@ class Off_Policy_Agent():
 
                 if total_episodes % 1000 == 0: #save graphs every 3000 episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    #interval_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    #loss_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    #gradient_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-                    #mean_std_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
-
-                    #activity_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
                 #Reset lists and activity
                 episode_reward = 0
@@ -860,7 +856,28 @@ class Off_Policy_Agent():
                 h_prev = torch.zeros(size = (1 ,1, 5*self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
-    def update(self, grad_vis_actor, grad_vis_critic):
+
+# new update function
+
+    def delay_update(self, hn_next):
+
+        #for the first 50 episodes, only update actor to minimize activity
+        policy_loss = torch.mean(hn_next, dim = -1)*.01 
+ 
+        #update step
+        policy_loss.requires_grad_()
+        self.actor_optimizer.zero_grad()
+        policy_loss.backward()
+        for name, param in self.actor.named_parameters():
+            norm_grad = np.array(torch.norm(param).detach().cpu())
+
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        self.actor_optimizer.step()
+
+        return policy_loss
+
+        
+    def update(self):
 
         #Sample from replay memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = self.policy_memory.sample(self.policy_batch_size)
@@ -911,7 +928,6 @@ class Off_Policy_Agent():
         qf_loss.backward()
         for name, param in self.critic.named_parameters():
             norm_grad = np.array(torch.norm(param).detach().cpu())
-            grad_vis_critic[f'{name}'].append(norm_grad)
         nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
@@ -930,14 +946,13 @@ class Off_Policy_Agent():
         min_qf_pi = torch.min(qf1_pi, qf2_pi)
 
         #Policy loss
-        policy_loss = ((self.alpha * log_prob_batch) - min_qf_pi).mean()
+        policy_loss = ((self.alpha * log_prob_batch) - min_qf_pi).mean() #+ torch.mean(hn_next, dim = -1)*.01
 
         #Policy Gradient Step
         self.actor_optimizer.zero_grad()
         policy_loss.backward()
         for name, param in self.actor.named_parameters():
             norm_grad = np.array(torch.norm(param).detach().cpu())
-            grad_vis_actor[f'{name}'].append(norm_grad) 
 
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
@@ -957,11 +972,6 @@ class Off_Policy_Agent():
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
 
-        #self.alpha_vis = self.alpha.detach().cpu().numpy()
-      
-        #print(type(self.alpha_vis))
-
-
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), torch.sum(next_log_prob).item(), torch.sum(log_prob_batch).item(), grad_vis_actor, grad_vis_critic
+        
 
         

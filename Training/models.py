@@ -36,18 +36,18 @@ class RNN_MultiRegional(nn.Module):
         # Masks for individual regions
         self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*4,)), torch.ones(size=(hid_dim,))]).to(device)
         self.thal_mask = torch.cat([torch.zeros(size=(hid_dim*3,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
-        self.str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
-        self.m1_thal_str_mask = torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
+        self.str_mask =  0.3 * torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*4,))]).to(device)
+        self.m1_thal_str_mask = torch.cat([0.3 * torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
         self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
 
         #Tonic inputs
         #str thal and motor cortex, give each like 0.5?
         #str, stn, snr, thal, m1
-        self.str_tonic = 0.1 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.stn_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.snr_tonic = 0.3 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.thal_tonic = torch.ones(size = (self.hid_dim,)).to(device)
-        self.m1_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
+        self.str_tonic = 0.1 * torch.zeros(size = (self.hid_dim,)).to(device)
+        self.stn_tonic =  0.01 * torch.zeros(size = (self.hid_dim,)).to(device)
+        self.snr_tonic = 0.03 * torch.zeros(size = (self.hid_dim,)).to(device)
+        self.thal_tonic = 0.01 *torch.ones(size = (self.hid_dim,)).to(device)
+        self.m1_tonic =  0.01 * torch.zeros(size = (self.hid_dim,)).to(device)
         
         
         self.tonic_inp = torch.cat([self.str_tonic,
@@ -191,7 +191,7 @@ class RNN_MultiRegional(nn.Module):
             
             hn_next = F.relu((1 - self.t_const) * hn_next
                              + self.t_const * ((W_rec @ hn_next.T).T
-                             + (inp[:, t, :] @ inp_weight * self.m1_mask))
+                             + (inp[:, t, :] @ inp_weight * self.str_mask ))
                              + self.tonic_inp)
             
 

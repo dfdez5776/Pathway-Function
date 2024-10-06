@@ -13,13 +13,14 @@ import os
 
 def main():
 
+
     ### PARAMETERS ###
     parser = config.config_parser()
     args = parser.parse_args()
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode, args.task_version)
+    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode, args.task_version, args.test_train)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(

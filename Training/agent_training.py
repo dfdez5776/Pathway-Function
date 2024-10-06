@@ -650,7 +650,7 @@ class Off_Policy_Agent():
     def test(self, max_steps):
         
         checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
-        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device) #change to self actor
+        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.test_train).to(self.device) #change to self actor
         self.actor.load_state_dict(checkpoint['agent_state_dict'])
 
         iteration = checkpoint['iteration']
@@ -658,7 +658,7 @@ class Off_Policy_Agent():
 
         #Initializing...
         state = self.env.reset(iteration)
-        h_prev = torch.zeros(size=(1 ,1 , self.hid_dim), device = self.device)
+        h_prev = torch.zeros(size=(1 ,1 , 5*self.hid_dim), device = self.device)
         num_episodes = 0
         episode_steps = 0 
         episode_reward = 0 
@@ -672,7 +672,7 @@ class Off_Policy_Agent():
             for _ in range(self.frame_skips):
 
                 episode_steps += 1
-                next_state, reward, done = self.env.step(episode_steps, action)
+                next_state, reward, done = self.env.step(episode_steps, action, h_current)
                 episode_reward += reward[0]
                 if done == True:
                     print("done!")
@@ -687,7 +687,7 @@ class Off_Policy_Agent():
                 iteration += 1
                 state = self.env.reset(iteration)
 
-                h_prev = torch.zeros(size = (1 , 1, self.hid_dim), device = self.device)
+                h_prev = torch.zeros(size = (1 , 1, 5*self.hid_dim), device = self.device)
                 episode_reward = 0
                 episode_steps = 0 
 

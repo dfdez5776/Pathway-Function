@@ -22,9 +22,9 @@ from effector import Effector , RigidTendonArm26
 #Environment class
 class EffectorTwoLinkArmEnv(gym.Env):
     
-    def __init__(self, max_timesteps, render_mode, task_version):
+    def __init__(self, max_timesteps, render_mode, task_version, test_train):
 
-        
+        self.test_train = test_train
         self.state = onp.array([0.0]*12) 
         self.joints = onp.array([0.0]*4) 
         self.obs_state = None
@@ -113,7 +113,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         if self.task_version == "original": 
             #if episode steps less than 100, reward = inverse of activity  
-            if episode_steps < 50:
+            if episode_steps < 11:
                 reward = 0 # discourages activation
             else:
                 reward = -1e-2 * penalty - 1e-3 * onp.sum(self.activation)
@@ -181,7 +181,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
             #Integrate and get state
 
         #Take step in environment and integrate, default is Euler
-        if episode_steps > 50: 
+        
+        if episode_steps > 10: 
             self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"

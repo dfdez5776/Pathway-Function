@@ -749,14 +749,11 @@ class Off_Policy_Agent():
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
                     #update to minimize activity
-                    if episode_steps > 1 and episode_steps < 51:
-                        policy_loss = self.delay_update(h_prev)
-                        #visualize activity
-                        if episode_steps == 50:
-                            print(policy_loss)
-                    
-                    #update
-                    self.update() #grad_vis_actor, grad_vis_critic
+                    if episode_steps > 1 and episode_steps < 11:
+                        self.delay_update(h_prev)
+                    else:
+                    #update normally
+                        self.update() 
 
            
 

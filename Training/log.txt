@@ -7,3 +7,9 @@ Model Training Log
 
 9/23 Still having difficulties loading in buffer. 100 time step may be too long. try different update rule during that period to make 
 loss dependent on activity only.
+
+10/1 trained using new update rule for delay. The loss during the delay is just the activity so 
+the model learns to minimize activity. Also reduce thal tonic input because too much tonic input to thalamus causes arm to freeze
+training well but not a definitive policy yet. seems like it needs more time.
+
+10/6 : reduce delay to 10 time steps. added stn and snr input to drown out thal

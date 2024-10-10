@@ -668,12 +668,16 @@ class Off_Policy_Agent():
 
             with torch.no_grad():
                 action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
+
+
+
             
             for _ in range(self.frame_skips):
 
                 episode_steps += 1
                 next_state, reward, done = self.env.step(episode_steps, action, h_current)
                 episode_reward += reward[0]
+
                 if done == True:
                     print("done!")
                     break
@@ -690,6 +694,11 @@ class Off_Policy_Agent():
                 h_prev = torch.zeros(size = (1 , 1, 5*self.hid_dim), device = self.device)
                 episode_reward = 0
                 episode_steps = 0 
+
+                #visualize
+                if iteration == iteration0 + 2:
+                    activity_vis(self.reward_save_path, self.vis_save_path, activity_dict, True)
+
 
 
 
@@ -749,11 +758,11 @@ class Off_Policy_Agent():
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
                     #update to minimize activity
-                    if episode_steps > 1 and episode_steps < 11:
-                        self.delay_update(h_prev)
-                    else:
+                    #if episode_steps > 1 and episode_steps < 11:
+                    #    self.delay_update(h_prev)
+                    #else:
                     #update normally
-                        self.update() 
+                    self.update() 
 
            
 
@@ -841,7 +850,7 @@ class Off_Policy_Agent():
                     np.save(f'{self.reward_save_path}.npy', Statistics)
                     print("Saved to %s" % 'training_reports')
 
-                if total_episodes % 1000 == 0: #save graphs every 3000 episodes
+                if total_episodes % 1000 == 0: #save graphs every n episodes
                     average_reward_vis(f'{self.reward_save_path}.npy', self.vis_save_path)
 
                 #Reset lists and activity

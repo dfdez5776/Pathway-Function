@@ -44,8 +44,8 @@ class RNN_MultiRegional(nn.Module):
         #str thal and motor cortex, give each like 0.5?
         #str, stn, snr, thal, m1
         self.str_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
-        self.stn_tonic =  0.05 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.snr_tonic = 0.05 * torch.ones(size = (self.hid_dim,)).to(device)
+        self.stn_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
+        self.snr_tonic = 0.1 * torch.ones(size = (self.hid_dim,)).to(device)
         self.thal_tonic = 0.1 *torch.ones(size = (self.hid_dim,)).to(device)
         self.m1_tonic =  torch.zeros(size = (self.hid_dim,)).to(device)
         
@@ -141,8 +141,16 @@ class RNN_MultiRegional(nn.Module):
 
         self.activity_dict = {'d1 right reach' : [],
                               'd2 right reach' : [],
+                              'stn right reach' : [], 
+                              'snr right reach' : [],
+                              'thal right reach' : [],
+                              'motor right reach' : [],
                               'd1 left reach' : [],
-                              'd2 left reach' : []}
+                              'd2 left reach' : [],
+                              'stn left reach' : [], 
+                              'snr left reach' : [],
+                              'thal left reach' : [],
+                              'motor left reach' : [],}
 
     def forward(self, inp, hn, iteration, iteration0):
 
@@ -215,20 +223,30 @@ class RNN_MultiRegional(nn.Module):
         
         if iteration == iteration0 or iteration == iteration0 + 1: 
           
-            if iteration%2 == 1:
+            if iteration % 2 == 1:
+
+                self.activity_dict['d1 right reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
+                self.activity_dict['d2 right reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
+                self.activity_dict['stn right reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
+                self.activity_dict['snr right reach'].append(torch.norm(hn_next[:, 2*self.hid_dim:3*self.hid_dim ]))
+                self.activity_dict['thal right reach'].append(torch.norm(hn_next[:,3*self.hid_dim:4*self.hid_dim ]))
+                self.activity_dict['motor right reach'].append(torch.norm(hn_next[:, 4*self.hid_dim: 5*self.hid_dim ]))
+
+            elif iteration % 2 == 0:
             #calculate activations
-                d1_activation = torch.norm(hn_next[:, 0:128])
-                d2_activation = torch.norm(hn_next[:, 128:256])
-                self.activity_dict['d1 right reach'].append(d1_activation)
-                self.activity_dict['d2 right reach'].append(d2_activation)
-            elif iteration%2 == 0:
-            #calculate activations
-                d1_activation = torch.norm(hn_next[:, 0:128])
-                d2_activation = torch.norm(hn_next[:, 128:256])
-                self.activity_dict['d1 left reach'].append(d1_activation)
-                self.activity_dict['d2 left reach'].append(d2_activation)
+                self.activity_dict['d1 left reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
+                self.activity_dict['d2 left reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
+                self.activity_dict['stn left reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
+                self.activity_dict['snr left reach'].append(torch.norm(hn_next[:, 2*self.hid_dim:3*self.hid_dim ]))
+                self.activity_dict['thal left reach'].append(torch.norm(hn_next[:,3*self.hid_dim:4*self.hid_dim ]))
+                self.activity_dict['motor left reach'].append(torch.norm(hn_next[:, 4*self.hid_dim: 5*self.hid_dim ]))
     
     def sample(self, state, hn, iteration, iteration0, reparameterize = True):
+
+
+        #if testing: get activity at each timestep
+        if self.test_train == "test":
+            self.get_activation(hn, iteration, iteration0)
 
         epsilon = 1e-4    
         

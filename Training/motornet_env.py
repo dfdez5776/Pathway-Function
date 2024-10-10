@@ -182,8 +182,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
         #Take step in environment and integrate, default is Euler
         
-        if episode_steps > 10: 
-            self.two_link_arm.step(action)    
+        #if episode_steps > 10: 
+        self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"
         state_dict = self.two_link_arm.states

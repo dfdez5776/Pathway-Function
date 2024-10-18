@@ -626,10 +626,11 @@ class Off_Policy_Agent():
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def select_action(self, state, h_prev,iteration , iteration0, evaluate):
+    def select_action(self, state, h_prev, iteration , iteration0, evaluate):
         
         state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
         h_prev = h_prev.to(self.device)
+   
 
         #For training
         if evaluate == False:
@@ -658,7 +659,7 @@ class Off_Policy_Agent():
 
         #Initializing...
         state = self.env.reset(iteration)
-        h_prev = torch.zeros(size=(1 ,1 , 5*self.hid_dim), device = self.device)
+        h_prev = torch.zeros(size=(1 ,1 , 4*self.hid_dim), device = self.device)
         num_episodes = 0
         episode_steps = 0 
         episode_reward = 0 
@@ -748,7 +749,7 @@ class Off_Policy_Agent():
         for name, param in self.critic.named_parameters():
             grad_vis_critic[f'{name}'] = []
 
-        h_prev = torch.zeros(size = (1 ,1 , 5*self.hid_dim), device = self.device )
+        h_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
@@ -767,6 +768,7 @@ class Off_Policy_Agent():
            
 
             with torch.no_grad():   
+        
                 action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
           
 
@@ -859,7 +861,7 @@ class Off_Policy_Agent():
                 
                 ep_trajectory = []
 
-                h_prev = torch.zeros(size = (1 ,1, 5*self.hid_dim), device = self.device)
+                h_prev = torch.zeros(size = (1 ,1, 4*self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
 
 
@@ -902,7 +904,7 @@ class Off_Policy_Agent():
       
 
         #Activites for sampling
-        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 5*self.hid_dim)).to(self.device)
+        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 4*self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 

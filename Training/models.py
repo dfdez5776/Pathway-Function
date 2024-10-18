@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.distributions import Normal
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import numpy as np
+import matplotlib.pyplot as plt
 import math
 from reward_vis import activity_vis
 
@@ -79,6 +80,8 @@ class RNN_MultiRegional(nn.Module):
         self.stn2snr_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
         # Inhibitory Connections
         self.snr2thal_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
+
+        self.bias = nn.Parameter(torch.empty(size =(1, 5*hid_dim)))
 
         nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
         nn.init.uniform_(self.str2snr_weight_l0_hh, 0, 0.01)
@@ -177,9 +180,11 @@ class RNN_MultiRegional(nn.Module):
         m12thal_rec = F.hardtanh(self.m12thal_weight_l0_hh, min_val=1e-10, max_val=1)
         thal2str_rec = F.hardtanh(self.thal2str_weight_l0_hh, min_val=1e-10, max_val=1)
         str2stn_rec = self.str2stn_mask * F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1)
-        stn2snr_rec = F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1) @ self.stn2snr_D
+        stn2snr_rec = F.hardtanh(self.stn2snr_weight_l0_hh, min_val=1e-10, max_val=1) #@ self.stn2snr_D #said self.str2stn_weight_l0_hh
         snr2thal_rec = F.hardtanh(self.snr2thal_weight_l0_hh, min_val=1e-10, max_val=1) @ self.snr2thal_D
         inp_weight = F.hardtanh(self.inp_weight, 1e-10, 1)
+        bias = F.hardtanh(self.bias, 1e-10, 1)
+     
 
         # Concatenate into single weight matrix
 
@@ -191,16 +196,21 @@ class RNN_MultiRegional(nn.Module):
         W_m1 = torch.cat([self.zeros, self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
         W_rec = torch.cat([W_str, W_stn, W_snr, W_thal, W_m1], dim=0)
         
+        #plt.imshow(W_rec.detach().cpu().numpy())
+        #plt.colorbar()
+        #plt.show()
+
+        # with default colors, dark blue is negative, yellow is positive
 
         # Loop through RNN
         for t in range(size):
             if self.test_train == "test":
                 self.get_activation(hn_next, iteration, iteration0)
-            
             hn_next = F.relu((1 - self.t_const) * hn_next
                              + self.t_const * ((W_rec @ hn_next.T).T
                              + (inp[:, t, :] @ inp_weight * self.str_mask ))
-                             + self.tonic_inp)
+                             + bias)
+            
             
 
             new_hs.append(hn_next)

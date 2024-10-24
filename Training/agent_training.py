@@ -626,18 +626,19 @@ class Off_Policy_Agent():
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def select_action(self, state, h_prev, iteration , iteration0, evaluate):
+    def select_action(self, state, h_prev, x_prev, iteration , iteration0, evaluate):
         
         state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
         h_prev = h_prev.to(self.device)
+        x_prev = x_prev.to(self.device)
    
 
         #For training
         if evaluate == False:
-            action, _, mean, rnn_out, h_current, std , _= self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
+            action, _, mean, rnn_out, h_current, x_current, std , _= self.actor.sample(state, h_prev, x_prev, iteration = None, iteration0 = None)
             mean = mean.squeeze().cpu().numpy()
             std = std.squeeze().cpu().numpy()
-            return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
+            return action.squeeze().detach().cpu().numpy(), h_current.detach(), x_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
         
         #For testing
         if evaluate == True:
@@ -660,6 +661,7 @@ class Off_Policy_Agent():
         #Initializing...
         state = self.env.reset(iteration)
         h_prev = torch.zeros(size=(1 ,1 , 4*self.hid_dim), device = self.device)
+        x_prev = torch.zeros(size=(1 ,1 , 4*self.hid_dim), device = self.device)
         num_episodes = 0
         episode_steps = 0 
         episode_reward = 0 
@@ -668,7 +670,7 @@ class Off_Policy_Agent():
         while iteration < max_steps:
 
             with torch.no_grad():
-                action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
+                action, h_current, x_current, activity_dict = self.select_action( state, h_prev, x_prev, iteration, iteration0, evaluate = True)
 
 
 
@@ -685,6 +687,7 @@ class Off_Policy_Agent():
                 
             state = next_state
             h_prev = h_current
+            x_prev = x_current
 
             if done:
                 print("episode steps", episode_steps)
@@ -750,6 +753,7 @@ class Off_Policy_Agent():
             grad_vis_critic[f'{name}'] = []
 
         h_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
+        x_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
@@ -758,23 +762,18 @@ class Off_Policy_Agent():
 
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
-                    #update to minimize activity
-                    #if episode_steps > 1 and episode_steps < 11:
-                    #    self.delay_update(h_prev)
-                    #else:
-                    #update normally
                     self.update() 
 
            
 
             with torch.no_grad():   
         
-                action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
+                action, h_current, x_current, _, mean, std = self.select_action(state, h_prev, x_prev, iteration = None, iteration0 = None, evaluate = False)
           
 
             for _ in range(self.frame_skips):
                 episode_steps += 1
-                next_state, reward, done = self.env.step(episode_steps, action,h_current, total_episodes)
+                next_state, reward, done = self.env.step(episode_steps, action, h_current,total_episodes)
                 episode_reward += reward[0]
                 if done == True:
                     print("done!")
@@ -786,6 +785,7 @@ class Off_Policy_Agent():
 
             state = next_state
             h_prev = h_current
+            x_prev = x_current
             
 
             Statistics["mean"].append(mean)
@@ -862,10 +862,8 @@ class Off_Policy_Agent():
                 ep_trajectory = []
 
                 h_prev = torch.zeros(size = (1 ,1, 4*self.hid_dim), device = self.device)
+                x_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
                 state = self.env.reset(total_episodes)
-
-
-# new update function
 
     def delay_update(self, hn_next):
 
@@ -905,6 +903,7 @@ class Off_Policy_Agent():
 
         #Activites for sampling
         h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 4*self.hid_dim)).to(self.device)
+        x0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 4*self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 
@@ -912,7 +911,7 @@ class Off_Policy_Agent():
 
         #Calculate target q using action sampled from policy and next state from batch
         with torch.no_grad():
-            next_action, next_log_prob, _, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor, iteration = None, iteration0 = None)
+            next_action, next_log_prob, _, _, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor, x0_actor, iteration = None, iteration0 = None)
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
@@ -942,7 +941,7 @@ class Off_Policy_Agent():
         ##Policy Update##
         #Sample reparameterized actions from state batch
         
-        reparam_action, log_prob_batch, _, _, _, _, _ = self.actor.sample(state_batch, h0_actor, iteration = None, iteration0 = None)
+        reparam_action, log_prob_batch, _, _, _, _, _, _ = self.actor.sample(state_batch, h0_actor, x0_actor, iteration = None, iteration0 = None)
         reparam_action = mask * reparam_action
         log_prob_batch = mask * log_prob_batch
 

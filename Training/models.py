@@ -153,7 +153,7 @@ class RNN_MultiRegional(nn.Module):
                               'thal left reach' : [],
                               'motor left reach' : [],}
 
-    def forward(self, inp, hn, iteration, iteration0):
+    def forward(self, inp, hn, xn, iteration, iteration0):
 
         '''
             Forward pass through the model
@@ -165,24 +165,12 @@ class RNN_MultiRegional(nn.Module):
         '''
 
         # Saving hidden states
-        hn_next = hn.squeeze(0)      
+        hn_next = hn.squeeze(0)  
+        xn_next = xn.squeeze(0)    
         size = inp.shape[1]
         new_hs = []
-        '''
-        # Get full weights for training
-        str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val=1) + self.str2str_fixed) @ self.str2str_D
-        m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-10, max_val=1) @ self.m12m1_D
-        m12str_rec = self.m12str_mask * F.hardtanh(self.m12str_weight_l0_hh, min_val=1e-10, max_val=1)
-        str2snr_rec = self.str2snr_mask * F.hardtanh(self.str2snr_weight_l0_hh, min_val=1e-10, max_val=1) @ self.str2snr_D
-        thal2m1_rec = F.hardtanh(self.thal2m1_weight_l0_hh, min_val=1e-10, max_val=1)
-        m12thal_rec = F.hardtanh(self.m12thal_weight_l0_hh, min_val=1e-10, max_val=1)
-        thal2str_rec = F.hardtanh(self.thal2str_weight_l0_hh, min_val=1e-10, max_val=1)
-        str2stn_rec = self.str2stn_mask * F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1)
-        stn2snr_rec = F.hardtanh(self.stn2snr_weight_l0_hh, min_val=1e-10, max_val=1) #@ self.stn2snr_D #said self.str2stn_weight_l0_hh
-        snr2thal_rec = F.hardtanh(self.snr2thal_weight_l0_hh, min_val=1e-10, max_val=1) @ self.snr2thal_D
-        inp_weight = F.hardtanh(self.inp_weight, 1e-10, 1)
-        bias = F.hardtanh(self.bias, 1e-10, 1)
-        '''
+        new_xs = []
+      
         #get full weights for training dishinhibition
         str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val=1) + self.str2str_fixed) @ self.str2str_D
         m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-10, max_val=1) @ self.m12m1_D
@@ -206,43 +194,35 @@ class RNN_MultiRegional(nn.Module):
         W_m1 = torch.cat([self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
         W_rec = torch.cat([W_str, W_stn, W_thal, W_m1], dim=0)
 
-        
-        
-        #plt.imshow(W_rec.detach().cpu().numpy())
-        #plt.colorbar()
-        #plt.show()
-
-        # with default colors, dark blue is negative, yellow is positive
-
         # Loop through RNN
         for t in range(size):
 
             if self.test_train == "test":
                 self.get_activation(hn_next, iteration, iteration0)
-            hn_next = F.relu((1 - self.t_const) * hn_next
+
+            xn_next = ((1 - self.t_const) * xn_next
                              + self.t_const * ((W_rec @ hn_next.T).T
                              + (inp[:, t, :] @ inp_weight * self.str_mask))
                              + bias)
             
-            
-
+            hn_next = F.relu(xn_next)
+            new_xs.append(xn_next)
             new_hs.append(hn_next)
 
         # Collect hidden states
-        rnn_out = torch.stack(new_hs, dim=1)
+        rnn_out = torch.stack(new_hs, dim = 1)
+        xn_out = torch.stack(new_xs, dim = 1)
         hn_last = rnn_out[:, -1, :].unsqueeze(0)
+        xn_last = new_xs[-1].unsqueeze(0)
 
         # Behavioral output layer
         mean_out = self.mean_linear(rnn_out * self.m1_mask)
         std_out = self.std_linear(rnn_out * self.m1_mask)
         std_out = torch.clamp(std_out, min = -20, max = 10)
 
-        
-    
-        return mean_out, std_out, rnn_out, hn_last
+        return mean_out, std_out, rnn_out, hn_last, xn_last
     
     def get_activation(self, hn_next, iteration, iteration0):
-        #not sure what index to use and also some of the hn_nexts are just 0?
         
         if iteration == iteration0 or iteration == iteration0 + 1: 
           
@@ -264,8 +244,7 @@ class RNN_MultiRegional(nn.Module):
                 self.activity_dict['thal left reach'].append(torch.norm(hn_next[:,3*self.hid_dim:4*self.hid_dim ]))
                 self.activity_dict['motor left reach'].append(torch.norm(hn_next[:, 4*self.hid_dim: 5*self.hid_dim ]))
     
-    def sample(self, state, hn, iteration, iteration0, reparameterize = True):
-
+    def sample(self, state, hn, xn, iteration, iteration0, reparameterize = True):
 
         #if testing: get activity at each timestep
         if self.test_train == "test":
@@ -273,7 +252,7 @@ class RNN_MultiRegional(nn.Module):
 
         epsilon = 1e-4    
         
-        mean, log_std, rnn_out, hn = self.forward(state, hn, iteration, iteration0)
+        mean, log_std, rnn_out, hn, xn = self.forward(state, hn, xn, iteration, iteration0)
 
         std = log_std.exp()
         normal = Normal(mean, std)
@@ -291,7 +270,7 @@ class RNN_MultiRegional(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
 
 
-        return action, log_prob, mean, rnn_out, hn, std, self.activity_dict
+        return action, log_prob, mean, rnn_out, hn, xn, std, self.activity_dict
 #Vanilla RNN for testing
 
 
@@ -347,7 +326,7 @@ class RNN(nn.Module):
         probs = Normal(mean, std)
         noise = probs.rsample()
 
-        y_t = torch.tanh(noise) #* self.action_scale + self.action_bias  #bound between 0 and 1
+        y_t = torch.tanh(noise) 
         action = y_t * self.action_scale + self.action_bias
 
         log_prob = probs.log_prob(noise)

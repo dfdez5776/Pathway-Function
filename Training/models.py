@@ -194,6 +194,10 @@ class RNN_MultiRegional(nn.Module):
         W_m1 = torch.cat([self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
         W_rec = torch.cat([W_str, W_stn, W_thal, W_m1], dim=0)
 
+        #plt.imshow(W_rec.detach().cpu().numpy())
+        #plt.colorbar()
+        #plt.show()
+
         # Loop through RNN
         for t in range(size):
 
@@ -231,18 +235,16 @@ class RNN_MultiRegional(nn.Module):
                 self.activity_dict['d1 right reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
                 self.activity_dict['d2 right reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
                 self.activity_dict['stn right reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
-                self.activity_dict['snr right reach'].append(torch.norm(hn_next[:, 2*self.hid_dim:3*self.hid_dim ]))
-                self.activity_dict['thal right reach'].append(torch.norm(hn_next[:,3*self.hid_dim:4*self.hid_dim ]))
-                self.activity_dict['motor right reach'].append(torch.norm(hn_next[:, 4*self.hid_dim: 5*self.hid_dim ]))
+                self.activity_dict['thal right reach'].append(torch.norm(hn_next[:,2*self.hid_dim:3*self.hid_dim ]))
+                self.activity_dict['motor right reach'].append(torch.norm(hn_next[:, 3*self.hid_dim: 4*self.hid_dim ]))
 
             elif iteration % 2 == 0:
             #calculate activations
                 self.activity_dict['d1 left reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
                 self.activity_dict['d2 left reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
                 self.activity_dict['stn left reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
-                self.activity_dict['snr left reach'].append(torch.norm(hn_next[:, 2*self.hid_dim:3*self.hid_dim ]))
-                self.activity_dict['thal left reach'].append(torch.norm(hn_next[:,3*self.hid_dim:4*self.hid_dim ]))
-                self.activity_dict['motor left reach'].append(torch.norm(hn_next[:, 4*self.hid_dim: 5*self.hid_dim ]))
+                self.activity_dict['thal left reach'].append(torch.norm(hn_next[:,2*self.hid_dim:3*self.hid_dim ]))
+                self.activity_dict['motor left reach'].append(torch.norm(hn_next[:, 3*self.hid_dim: 4*self.hid_dim ]))
     
     def sample(self, state, hn, xn, iteration, iteration0, reparameterize = True):
 
@@ -275,6 +277,7 @@ class RNN_MultiRegional(nn.Module):
 
 
 class RNN(nn.Module):
+
     def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
         super(RNN, self).__init__()
 

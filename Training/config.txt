@@ -14,7 +14,7 @@ frame_skips = 2
 action_scale = 0.5
 action_bias = 0.5
 max_steps = 1000000
-render_mode = "rgb_array"
+render_mode = "human"
 save_iter = 10
 test_train = "train"
 continue_training = "no"
@@ -28,8 +28,8 @@ alpha = 0.2
 task_version = "original"
 
 ### MODEL SAVING ###
-model_save_path = "checkpoints/SAC/10_15" 
-buffer_save_path = "checkpoints/SAC/buffer_10_15"          
-reward_save_path = "training_reports/SAC/10_15"  
-vis_save_path = "visualization/SAC/10_15" 
+model_save_path = "checkpoints/SAC/10_30" 
+buffer_save_path = "checkpoints/SAC/buffer_10_30"          
+reward_save_path = "training_reports/SAC/10_30"  
+vis_save_path = "visualization/SAC/10_30" 
 

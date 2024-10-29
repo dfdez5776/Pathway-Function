@@ -42,6 +42,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         # Target max-min limit
         self.target_high = [2, 2]
         self.target_low = [-1*i for i in self.target_high]
+        self.target = onp.array([-0.2, 0.55])
         # Joint max-min limit
         self.joint_high = [onp.pi, onp.pi]
         self.joint_low = [-1*i for i in self.joint_high]
@@ -122,11 +123,12 @@ class EffectorTwoLinkArmEnv(gym.Env):
     def reset(self, episode):
         
         
+        '''
         if episode % 2 == 0 :
             self.target = onp.array([-0.2, 0.55]) #[x,y]
         else:
             self.target = onp.array([0.45, 0.55]) #[x,y]
-
+        '''
         if self.task_version == "delay_task":
             self.targets_pos = onp.array([0.0, 0.0, 0.0, 0.0])
 

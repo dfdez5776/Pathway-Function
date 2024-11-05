@@ -574,7 +574,7 @@ class Off_Policy_Agent():
 
         #initialize Actor/Critic RNNs 
         
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.test_train).to(self.device)
+        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device)
 
         self.critic = Critic2(self.inp_dim, self.action_dim, self.hid_dim).to(self.device)
 
@@ -596,20 +596,16 @@ class Off_Policy_Agent():
 
             #load in optimizers 
             self.actor_optimizer.load_state_dict(checkpoint['agent_optimizer_state_dict'])
-
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-
 
             #load in buffer
             self.policy_memory.buffer = checkpoint['buffer']
 
-            
 
         #update critics and their targets
         if continue_training != "yes":
             self.hard_update(self.target_critic, self.critic)
 
-        
 
         #target entropy = - dim(action)
         if self.automatic_entropy_tuning:
@@ -626,23 +622,21 @@ class Off_Policy_Agent():
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def select_action(self, state, h_prev, x_prev, iteration , iteration0, evaluate):
+    def select_action(self, state, h_prev, iteration , iteration0, evaluate):
         
         state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
         h_prev = h_prev.to(self.device)
-        x_prev = x_prev.to(self.device)
-   
 
         #For training
         if evaluate == False:
-            action, _, mean, rnn_out, h_current, x_current, std , _= self.actor.sample(state, h_prev, x_prev, iteration = None, iteration0 = None)
+            action, _, mean, rnn_out, h_current, std , _= self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
             mean = mean.squeeze().cpu().numpy()
             std = std.squeeze().cpu().numpy()
-            return action.squeeze().detach().cpu().numpy(), h_current.detach(), x_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
+            return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
         
         #For testing
         if evaluate == True:
-            _, _, action, rnn_out, h_current, std, activity_dict = self.actor.sample(state, h_prev, iteration, iteration0)
+            _, _, action, rnn_out, h_current, x_current, std, activity_dict = self.actor.sample(state, h_prev, x_prev, iteration, iteration0)
             return action, h_current, activity_dict
         
 
@@ -652,16 +646,16 @@ class Off_Policy_Agent():
     def test(self, max_steps):
         
         checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
-        self.actor = RNN_MultiRegional(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device, self.test_train).to(self.device) #change to self actor
-        self.actor.load_state_dict(checkpoint['agent_state_dict'])
+        self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device) #change to self actor
+        self.actor.load_state_dict(checkpoint)
+
 
         iteration = checkpoint['iteration']
         iteration0 = iteration
 
         #Initializing...
         state = self.env.reset(iteration)
-        h_prev = torch.zeros(size=(1 ,1 , 4*self.hid_dim), device = self.device)
-        x_prev = torch.zeros(size=(1 ,1 , 4*self.hid_dim), device = self.device)
+        h_prev = torch.zeros(size=(1 ,1 , self.hid_dim), device = self.device)
         num_episodes = 0
         episode_steps = 0 
         episode_reward = 0 
@@ -670,10 +664,7 @@ class Off_Policy_Agent():
         while iteration < max_steps:
 
             with torch.no_grad():
-                action, h_current, x_current, activity_dict = self.select_action( state, h_prev, x_prev, iteration, iteration0, evaluate = True)
-
-
-
+                action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
             
             for _ in range(self.frame_skips):
 
@@ -686,8 +677,7 @@ class Off_Policy_Agent():
                     break
                 
             state = next_state
-            h_prev = h_current
-            x_prev = x_current
+            h_prev = h_current 
 
             if done:
                 print("episode steps", episode_steps)
@@ -695,15 +685,14 @@ class Off_Policy_Agent():
                 iteration += 1
                 state = self.env.reset(iteration)
 
-                h_prev = torch.zeros(size = (1 , 1, 5*self.hid_dim), device = self.device)
+                h_prev = torch.zeros(size = (1 , 1, self.hid_dim), device = self.device)
+
                 episode_reward = 0
                 episode_steps = 0 
 
                 #visualize
                 if iteration == iteration0 + 2:
                     activity_vis(self.reward_save_path, self.vis_save_path, activity_dict, True)
-
-
 
 
     def train(self, max_steps, test_train):
@@ -752,14 +741,12 @@ class Off_Policy_Agent():
         for name, param in self.critic.named_parameters():
             grad_vis_critic[f'{name}'] = []
 
-        h_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
-        x_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
+        h_prev = torch.zeros(size = (1 ,1 , self.hid_dim), device = self.device )
 
         #Episode Training Loop
         for t in range(max_steps):
 
             #add to replay buffer 
-
             if len(self.policy_memory.buffer) > self.policy_batch_size:
                 for _ in range(self.policy_batch_iters):
                     self.update() 
@@ -768,7 +755,7 @@ class Off_Policy_Agent():
 
             with torch.no_grad():   
         
-                action, h_current, x_current, _, mean, std = self.select_action(state, h_prev, x_prev, iteration = None, iteration0 = None, evaluate = False)
+                action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
           
 
             for _ in range(self.frame_skips):
@@ -784,9 +771,7 @@ class Off_Policy_Agent():
             ep_trajectory.append((state, action, reward, next_state, mask))
 
             state = next_state
-            h_prev = h_current
-            x_prev = x_current
-            
+            h_prev = h_current         
 
             Statistics["mean"].append(mean)
             Statistics["std"].append(std)
@@ -807,7 +792,7 @@ class Off_Policy_Agent():
                 if len(all_steps) > 0:
                     mean_episode_steps = np.mean(np.array(all_steps)[-1000:])
                 if len(all_reward) > 10:
-                    if total_episodes % 20 == 0: #save params every 500 episodes
+                    if mean_episode_reward >= best_mean_episode_reward: ##Save best reward instead
                         torch.save({
                             'iteration': t,
                             'agent_state_dict': self.actor.state_dict(),
@@ -836,16 +821,12 @@ class Off_Policy_Agent():
                 Statistics["critic_target_loss"] = critic_target_losses
                 Statistics["sampled_entropies"] = sampled_entropies
                 Statistics["batch_entropies"] = batch_entropies
-               
-              
 
                 print("Episode %d" % (total_episodes,))
                 print("reward: %f" % episode_reward)
                 print("steps: %f" % episode_steps)
                 print("best mean reward: %f" % best_mean_episode_reward)
                 sys.stdout.flush()
-
-
 
                 if total_episodes % self.log_steps == 0:
                     # Dump statistics to pickle
@@ -861,26 +842,8 @@ class Off_Policy_Agent():
                 
                 ep_trajectory = []
 
-                h_prev = torch.zeros(size = (1 ,1, 4*self.hid_dim), device = self.device)
-                x_prev = torch.zeros(size = (1 ,1 , 4*self.hid_dim), device = self.device )
+                h_prev = torch.zeros(size = (1 ,1, self.hid_dim), device = self.device)
                 state = self.env.reset(total_episodes)
-
-    def delay_update(self, hn_next):
-
-        #for the first 50 episodes, only update actor to minimize activity
-        policy_loss = torch.mean(hn_next, dim = -1)*.01 
- 
-        #update step
-        policy_loss.requires_grad_()
-        self.actor_optimizer.zero_grad()
-        policy_loss.backward()
-        for name, param in self.actor.named_parameters():
-            norm_grad = np.array(torch.norm(param).detach().cpu())
-
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
-        self.actor_optimizer.step()
-
-        return policy_loss
 
         
     def update(self):
@@ -902,8 +865,7 @@ class Off_Policy_Agent():
       
 
         #Activites for sampling
-        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 4*self.hid_dim)).to(self.device)
-        x0_actor = torch.zeros(size=(1, next_state_batch.shape[0], 4*self.hid_dim)).to(self.device)
+        h0_actor = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
         h0_critic = torch.zeros(size=(1, next_state_batch.shape[0], self.hid_dim)).to(self.device)
 
 
@@ -911,7 +873,7 @@ class Off_Policy_Agent():
 
         #Calculate target q using action sampled from policy and next state from batch
         with torch.no_grad():
-            next_action, next_log_prob, _, _, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor, x0_actor, iteration = None, iteration0 = None)
+            next_action, next_log_prob, _, _, _, _, _ = self.actor.sample(next_state_batch, h0_actor, iteration = None, iteration0 = None)
             qf1_next_target, qf2_next_target = self.target_critic(next_state_batch, next_action, h0_critic)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
             target_q = reward_batch + mask_batch * self.gamma*(min_qf_next_target - self.alpha * next_log_prob) 
@@ -941,7 +903,7 @@ class Off_Policy_Agent():
         ##Policy Update##
         #Sample reparameterized actions from state batch
         
-        reparam_action, log_prob_batch, _, _, _, _, _, _ = self.actor.sample(state_batch, h0_actor, x0_actor, iteration = None, iteration0 = None)
+        reparam_action, log_prob_batch, _, _, _, _, _ = self.actor.sample(state_batch, h0_actor, iteration = None, iteration0 = None)
         reparam_action = mask * reparam_action
         log_prob_batch = mask * log_prob_batch
 

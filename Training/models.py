@@ -194,9 +194,9 @@ class RNN_MultiRegional(nn.Module):
         W_m1 = torch.cat([self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
         W_rec = torch.cat([W_str, W_stn, W_thal, W_m1], dim=0)
 
-        #plt.imshow(W_rec.detach().cpu().numpy())
-        #plt.colorbar()
-        #plt.show()
+        plt.imshow(W_rec.detach().cpu().numpy())
+        plt.colorbar()
+        plt.show()
 
         # Loop through RNN
         for t in range(size):

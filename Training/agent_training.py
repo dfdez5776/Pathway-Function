@@ -171,7 +171,7 @@ class Off_Policy_Agent():
         episode_reward = 0 
 
         #run episode as usual in train but without the update
-        for episode in range(2):
+        for t in range(self.env.max_timesteps):
 
             with torch.no_grad():
                 action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
@@ -198,6 +198,8 @@ class Off_Policy_Agent():
 
                 episode_reward = 0
                 episode_steps = 0 
+
+                break
 
         if vis_activity:
             activity_vis(self.reward_save_path, self.vis_save_path, True)

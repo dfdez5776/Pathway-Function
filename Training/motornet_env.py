@@ -25,7 +25,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
     def __init__(self, max_timesteps, render_mode, task_version, test_train):
 
         self.test_train = test_train
-        self.state = onp.array([0.0]*12) 
+        self.state = onp.array([0.0]*14) 
         self.joints = onp.array([0.0]*4) 
         self.obs_state = None
 
@@ -81,36 +81,11 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
-    def reward(self, episode_steps, total_episodes, hn):
+    def reward(self):
               
         reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
         penalty = 1 - (1 / 1000**euclidian_distance)
-
-        if self.task_version == "delay_task":
-
-            if total_episodes % 2 == 0 and episode_steps <= 20:
-
-                if sum(self.activation) >= 0.1:   #maybe lower this
-                    reward = -10
-                else:
-                    reward = 0  
-
-            elif total_episodes % 2 == 0:  
-                reward = -1e-2 * penalty
-                
-
-
-            if total_episodes % 2 == 1 and episode_steps <= 80:       
-                if sum(self.activation) >= 0.1:
-                    reward = -10
-                else:
-                    reward = 0  
-
-            elif total_episodes % 2 == 1:
-                reward = -1e-2 * penalty
-              
-        
 
         if self.task_version == "original": 
             if euclidian_distance <= self.target_radius:
@@ -138,6 +113,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         state_dict = self.two_link_arm.states
 
         self.joints = onp.array(state_dict.get("joint")).squeeze() #import from effector module instead
+        self.fingertip = onp.array(state_dict.get("fingertip")).squeeze()
         self.activation = onp.array(state_dict.get("activation"))
 
 
@@ -146,7 +122,8 @@ class EffectorTwoLinkArmEnv(gym.Env):
             self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
 
         if self.task_version == "original":
-            self.obs_state = onp.concatenate([self.target, self.joints, self.activation])
+            self.obs_state = onp.concatenate([self.target, self.joints, self.activation, self.fingertip])
+    
 
         self.render_2(self.joints[:2])
         return onp.array(self.obs_state, dtype = onp.float32)
@@ -163,22 +140,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
         return False  
         
     def step(self, episode_steps, action, h_current, total_episodes=0):  ##pass in episode number
-        
-
-        if self.task_version == "delay_task":
-
-            if total_episodes % 2 == 0  and episode_steps <= 20: #(even will be 20 second, left reaches)
-                self.targets_pos ==  onp.array([0.0, 0.0, 0.0, 0.0])
-
-            if total_episodes % 2 == 1  and episode_steps <= 80: #(odd will be 80 second, right reaches)
-                self.targets_pos == onp.array([0.0, 0.0, 0.0, 0.0])
-
-            else:
-                self.targets_pos == onp.array([-0.2, 5.5, 0.2, 5.5])  #after delay, both targets known
-
-
-            #Integrate and get state
-
         #Take step in environment and integrate, default is Euler
         
         self.two_link_arm.step(action)    
@@ -187,28 +148,18 @@ class EffectorTwoLinkArmEnv(gym.Env):
         state_dict = self.two_link_arm.states
 
         #Extract states       
-        self.joints = onp.array(state_dict.get("joint").squeeze())  
+        self.joints = onp.array(state_dict.get("joint").squeeze()) 
+        self.fingertip = onp.array(state_dict.get("fingertip")).squeeze() 
         self.activation = onp.array(state_dict.get("activation")).squeeze()
-       
+
 
         #Extract hand pos for reward
         self.current_hand_pos = onp.array(state_dict.get("fingertip").squeeze())
         
-        #Concatenate targets, joint angles, joint position, and muscle activation into full state
-        #for delay task modeled after experiment
-        if self.task_version == "delay_task":
-            self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
-
-        
-        #for original task
-        if self.task_version == "original":
-            self.obs_state = onp.concatenate([self.target, self.joints, self.activation])
-
-        
-
+        self.obs_state = onp.concatenate([self.target, self.joints, self.activation, self.fingertip])
 
         # Get reward
-        reward = self.reward(episode_steps, total_episodes, h_current)
+        reward = self.reward()
 
         # Get done
         done = self.done(episode_steps)

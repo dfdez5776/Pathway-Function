@@ -636,8 +636,8 @@ class Off_Policy_Agent():
         
         #For testing
         if evaluate == True:
-            _, _, action, rnn_out, h_current, x_current, std, activity_dict = self.actor.sample(state, h_prev, x_prev, iteration, iteration0)
-            return action, h_current, activity_dict
+            _, _, action, rnn_out, h_current, std= self.actor.sample(state, h_prev, iteration, iteration0)
+            return action, h_current
         
 
         
@@ -647,7 +647,7 @@ class Off_Policy_Agent():
         
         checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
         self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device) #change to self actor
-        self.actor.load_state_dict(checkpoint)
+        self.actor.load_state_dict(checkpoint['agent_state_dict'])
 
 
         iteration = checkpoint['iteration']
@@ -692,7 +692,8 @@ class Off_Policy_Agent():
 
                 #visualize
                 if iteration == iteration0 + 2:
-                    activity_vis(self.reward_save_path, self.vis_save_path, activity_dict, True)
+
+                    activity_vis(self.reward_save_path, self.vis_save_path, True)
 
 
     def train(self, max_steps, test_train):

@@ -318,13 +318,30 @@ class RNN(nn.Module):
 
     def sample(self, state, h_prev, iteration, iteration0):
 
-        activity_dict = {}
+        activity_dict = {'right_reach',
+                         'left_reach'}
 
         mean, log_std, rnn_out, hn = self.forward(state, h_prev)
 
-        std = log_std.exp()
+        #Record activity for analysis
+        '''
+        if iteration == iteration0:
+            if iteration % 2 == 0:
+                activity_dict['right_reach'] = hn
+            else:
+                activity_dict['right_reach'] = hn
 
-       
+        elif iteration == iteration0 +1:
+            if iteration % 2 == 0:
+                activity_dict['left_reach'] = hn
+            else:
+                activity_dict['left_reach'] = hn
+        
+        if iteration == iteration0 + 2:
+            np.save(f'{self.testing_save_path}.npy', activity_dict)
+        '''
+
+        std = log_std.exp()
 
         probs = Normal(mean, std)
         noise = probs.rsample()
@@ -338,7 +355,7 @@ class RNN(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias 
        
-        return action, log_prob, mean, rnn_out, hn, std, activity_dict
+        return action, log_prob, mean, rnn_out, hn, std
     
     def initialize_weights(self):
 

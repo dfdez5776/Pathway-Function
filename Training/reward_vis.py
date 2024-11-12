@@ -30,7 +30,6 @@ def average_reward_vis(reward_save_path, vis_save_path):
     else:
         vis_save_path = f'{vis_save_path}_average.png'
         plt.savefig(vis_save_path)
-     
 
 def interval_reward_vis(reward_save_path, vis_save_path):
 
@@ -56,7 +55,6 @@ def interval_reward_vis(reward_save_path, vis_save_path):
         interval_averages_rew.append(interval_average_rewards)
         interval_averages_step.append(interval_average_steps)
         i += interval
-
     
     x0 = np.size(interval_averages_rew) + 1
     x = np.arange(1, x0)
@@ -119,9 +117,6 @@ def loss_vis(reward_save_path, vis_save_path):
     batch_entropies = data["batch_entropies"]
     alpha = data["alpha"]
 
-    print(alpha)
-
-
     figure, subplot = plt.subplots(4)
     subplot[0].plot(actor_loss, label = 'actor loss')
     subplot[0].legend()
@@ -153,9 +148,6 @@ def mean_std_vis(reward_save_path, vis_save_path):
     subplot[0].legend()
     subplot[1].plot(std, label = 'std')
     subplot[1].legend()
-
-
-
         
     if __name__ == "__main__":
         plt.show()
@@ -163,21 +155,7 @@ def mean_std_vis(reward_save_path, vis_save_path):
         vis_save_path = f'{vis_save_path}_mean_std.png'
         plt.savefig(vis_save_path)
 
-    #load in data like before
-
-    #make two subplots, one for mean and one for std
-
-
-    
-
-
-
-
-
 def activity_vis(reward_save_path, vis_save_path, activity_dict):
-
-    print(len(activity_dict['d1 right reach']))
-    
 
     figure, subplot = plt.subplots(2)
     figure.suptitle('D1 and D2 activity during Right reaches')
@@ -185,8 +163,6 @@ def activity_vis(reward_save_path, vis_save_path, activity_dict):
     subplot[0].set_title('D1')
     subplot[1].plot(activity_dict['d2 right reach'], color = 'blue', linewidth = .5)
     subplot[1].set_title('d2 right reach')
-
-    
     plt.show()
 
     figure, subplot = plt.subplots(2)
@@ -195,61 +171,9 @@ def activity_vis(reward_save_path, vis_save_path, activity_dict):
     subplot[0].set_title('D1')
     subplot[1].plot(activity_dict['d2 left reach'], color = 'blue', linewidth = .5)
     subplot[1].set_title('d2 left reach')
-
-    
     plt.show()
-
-    #activity = data["activity_magnitude"]
-    #print(activity)
-    
-    #activity_vis = plt.figure()
-    #plt.plot(range(1, len(activity)+1), activity)
-    #plt.suptitle('Activity')
-
-    
-    #if __name__ == "__main__":
-    #    plt.show()
-    #else:
-    #    vis_save_path = f'{vis_save_path}_activity.png'
-    #    plt.savefig(vis_save_path)
-
 
 def test_PSTH(str_activity, thal_activity, motor_activity, length_Rtrial, length_Ltrial): 
 
-
     plt.plot( str_activity["indirect_activityL"])
     plt.show()
-    
-
-
-    
-
-
-
-#to run on local from saved paths
-def main():
-
-
-    #load in data
-
-    reward_save_path = r'training_reports\07_normalization.npy'
-   
-    vis_save_path = r'visualizations\07_normalization_final'
-
-
-
-
-    rewards = np.load(reward_save_path, allow_pickle=True)
-    data = rewards.item()
-    
-    
-    #visualize_steps_rewards(data, vis_save_path0)
-    #interval_averages(data, vis_save_path1)
-    gradient_vis(data, vis_save_path)
-
-    #activity_vis(data,  r'training_reports\test.npy')
-
-
-
-if __name__ == "__main__":
-    main()

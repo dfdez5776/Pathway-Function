@@ -33,8 +33,9 @@ def main():
         constructor=optim.AdamW,
         kwargs=dict(lr=args.lr),
     )
+
     if args.algorithm == "optimization":
-        print(type(args.algorithm))
+
         setup = optimizer(env,
                           args.max_episodes,
                           args.inp_dim,
@@ -44,7 +45,8 @@ def main():
                           args.action_bias,
                           optimizer_spec_actor)
 
-    if args.algorithm == "SAC":
+    elif args.algorithm == "SAC":
+
         setup = Off_Policy_Agent(args.policy_replay_size,  
                                     args.policy_batch_size, 
                                     args.policy_batch_iters,
@@ -71,24 +73,6 @@ def main():
                                     args.automatic_entropy_tuning,
                                     args.continue_training,
                                     args.test_train )
-    if args.algorithm == "SAC":
-        setup = On_Policy_Agent(env,
-                                args.seed,
-                                args.inp_dim,
-                                args.hid_dim,
-                                args.action_dim,
-                                optimizer_spec_actor,
-                                optimizer_spec_critic,
-                                args.gamma,
-                                args.save_iter,
-                                args.log_steps,
-                                args.frame_skips,
-                                args.model_save_path,
-                                args.reward_save_path,
-                                args.vis_save_path,
-                                args.action_scale,
-                                args.action_bias)
-    
     
     if args.test_train == "test":
         setup.test(args.max_steps) 

@@ -21,7 +21,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode, args.task_version, args.test_train)
+    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode, args.task_version, args.test_train, args.inp_dim)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(
@@ -33,18 +33,19 @@ def main():
         constructor=optim.AdamW,
         kwargs=dict(lr=args.lr),
     )
+
+
     if args.algorithm == "optimization":
-        print(type(args.algorithm))
         setup = optimizer(env,
                           args.max_episodes,
                           args.inp_dim,
                           args.hid_dim,
                           args.action_dim,
                           args.action_scale,
-                          args.action_bias,
-                          optimizer_spec_actor)
+                          args.action_bias)
 
     if args.algorithm == "SAC":
+
         setup = Off_Policy_Agent(args.policy_replay_size,  
                                     args.policy_batch_size, 
                                     args.policy_batch_iters,
@@ -71,23 +72,7 @@ def main():
                                     args.automatic_entropy_tuning,
                                     args.continue_training,
                                     args.test_train )
-    if args.algorithm == "SAC":
-        setup = On_Policy_Agent(env,
-                                args.seed,
-                                args.inp_dim,
-                                args.hid_dim,
-                                args.action_dim,
-                                optimizer_spec_actor,
-                                optimizer_spec_critic,
-                                args.gamma,
-                                args.save_iter,
-                                args.log_steps,
-                                args.frame_skips,
-                                args.model_save_path,
-                                args.reward_save_path,
-                                args.vis_save_path,
-                                args.action_scale,
-                                args.action_bias)
+
     
     
     if args.test_train == "test":

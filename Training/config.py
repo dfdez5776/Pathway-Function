@@ -64,6 +64,12 @@ def config_parser():
                         type=int, 
                         default=100, 
                         help='number of timesteps for single episode (num / dt)')
+    
+    parser.add_argument('--max_episodes', 
+                        type=int, 
+                        default=6000, 
+                        help='maximum episodes to run')
+    
     parser.add_argument('--render_mode', 
                         type=str, 
                         default="human", 
@@ -120,7 +126,7 @@ def config_parser():
     parser.add_argument('--algorithm', 
                         type=str, 
                         default="SAC", 
-                        help='which algorithm to use. SAC or Actor-Critic w Eligibility trace')
+                        help='which algorithm to use. SAC, Actor-Critic w Eligibility trace, Optimization')
     parser.add_argument('--policy_replay_size', 
                         type=int, 
                         default=4000, 

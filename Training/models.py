@@ -304,6 +304,8 @@ class RNN(nn.Module):
         
         x =  F.relu(self.f1(state))
 
+        print(x.shape, h_prev.shape)
+
         x, hn_next = self.gru(x, h_prev)
 
         x = F.relu(self.f2(x))
@@ -316,30 +318,11 @@ class RNN(nn.Module):
         return mean, log_std, x, hn_next
 
 
-    def sample(self, state, h_prev, iteration, iteration0):
+    def sample(self, state, h_prev):
 
-        activity_dict = {'right_reach',
-                         'left_reach'}
+       
 
         mean, log_std, rnn_out, hn = self.forward(state, h_prev)
-
-        #Record activity for analysis
-        '''
-        if iteration == iteration0:
-            if iteration % 2 == 0:
-                activity_dict['right_reach'] = hn
-            else:
-                activity_dict['right_reach'] = hn
-
-        elif iteration == iteration0 +1:
-            if iteration % 2 == 0:
-                activity_dict['left_reach'] = hn
-            else:
-                activity_dict['left_reach'] = hn
-        
-        if iteration == iteration0 + 2:
-            np.save(f'{self.testing_save_path}.npy', activity_dict)
-        '''
 
         std = log_std.exp()
 

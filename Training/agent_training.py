@@ -622,21 +622,21 @@ class Off_Policy_Agent():
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def select_action(self, state, h_prev, iteration , iteration0, evaluate):
+    def select_action(self, state, h_prev, evaluate):
         
-        state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0).unsqueeze(0)
+        state = torch.tensor(state, dtype = torch.float32, device=self.device).unsqueeze(0)
         h_prev = h_prev.to(self.device)
 
         #For training
         if evaluate == False:
-            action, _, mean, rnn_out, h_current, std , _= self.actor.sample(state, h_prev, iteration = None, iteration0 = None)
+            action, _, mean, rnn_out, h_current, std = self.actor.sample(state, h_prev)
             mean = mean.squeeze().cpu().numpy()
             std = std.squeeze().cpu().numpy()
             return action.squeeze().detach().cpu().numpy(), h_current.detach(), rnn_out.detach().cpu().numpy(), mean, std 
         
         #For testing
         if evaluate == True:
-            _, _, action, rnn_out, h_current, std= self.actor.sample(state, h_prev, iteration, iteration0)
+            _, _, action, rnn_out, h_current, std= self.actor.sample(state, h_prev)
             return action, h_current
         
 
@@ -644,36 +644,35 @@ class Off_Policy_Agent():
 
 
     def test(self, max_steps):
+        print('testing')
         
         checkpoint = torch.load(f'{self.model_save_path}.pth', map_location = torch.device('cpu'))
         self.actor = RNN(self.inp_dim, self.hid_dim, self.action_dim, self.action_scale, self.action_bias, self.device).to(self.device) #change to self actor
         self.actor.load_state_dict(checkpoint['agent_state_dict'])
 
 
-        iteration = checkpoint['iteration']
-        iteration0 = iteration
+        episode = checkpoint['iteration']
 
         #Initializing...
-        state = self.env.reset(iteration)
+        state = self.env.reset(episode)
         h_prev = torch.zeros(size=(1 ,1 , self.hid_dim), device = self.device)
         num_episodes = 0
         episode_steps = 0 
         episode_reward = 0 
+        count = 0 
+        test = True
 
-        #run episode as usual in train but without the update
-        while iteration < max_steps:
+        while test:
 
             with torch.no_grad():
-                action, h_current, activity_dict = self.select_action( state, h_prev, iteration, iteration0, evaluate = True)
+                action, h_current = self.select_action( state, h_prev, evaluate = True)
             
             for _ in range(self.frame_skips):
 
                 episode_steps += 1
                 next_state, reward, done = self.env.step(episode_steps, action, h_current)
                 episode_reward += reward[0]
-
-                if done == True:
-                    print("done!")
+                if done:
                     break
                 
             state = next_state
@@ -682,18 +681,15 @@ class Off_Policy_Agent():
             if done:
                 print("episode steps", episode_steps)
 
-                iteration += 1
-                state = self.env.reset(iteration)
+                episode += 1
+                state = self.env.reset(episode)
 
                 h_prev = torch.zeros(size = (1 , 1, self.hid_dim), device = self.device)
 
                 episode_reward = 0
                 episode_steps = 0 
 
-                #visualize
-                if iteration == iteration0 + 2:
 
-                    activity_vis(self.reward_save_path, self.vis_save_path, True)
 
 
     def train(self, max_steps, test_train):
@@ -755,16 +751,14 @@ class Off_Policy_Agent():
            
 
             with torch.no_grad():   
-        
-                action, h_current, _, mean, std = self.select_action(state, h_prev, iteration = None, iteration0 = None, evaluate = False)
+                action, h_current, _, mean, std = self.select_action(state, h_prev, evaluate = False)
           
 
             for _ in range(self.frame_skips):
                 episode_steps += 1
-                next_state, reward, done = self.env.step(episode_steps, action, h_current,total_episodes)
-                episode_reward += reward[0]
+                next_state, reward, done = self.env.step(episode_steps, action, total_episodes)
+                episode_reward += reward
                 if done == True:
-                    print("done!")
                     break
 
             mask = 1.0 if episode_steps == self.env.max_timesteps else float(not done)

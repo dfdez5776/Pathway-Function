@@ -22,11 +22,12 @@ from effector import Effector , RigidTendonArm26
 #Environment class
 class EffectorTwoLinkArmEnv(gym.Env):
     
-    def __init__(self, max_timesteps, render_mode, task_version, test_train):
+    def __init__(self, max_timesteps, render_mode, task_version, test_train, inp_dim):
 
         self.test_train = test_train
-        self.state = onp.array([0.0]*14) 
-        self.joints = onp.array([0.0]*4) 
+        self.inp_dim = inp_dim
+        self.state = th.tensor([0.0]*self.inp_dim)
+        self.joints = th.tensor([0.0]*4)
         self.obs_state = None
 
         self.viewer = None 
@@ -42,7 +43,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
         # Target max-min limit
         self.target_high = [2, 2]
         self.target_low = [-1*i for i in self.target_high]
-        self.target = onp.array([-0.2, 0.55])
+        self.target = th.tensor([-0.2, 0.55])
         # Joint max-min limit
         self.joint_high = [onp.pi, onp.pi]
         self.joint_low = [-1*i for i in self.joint_high]
@@ -83,6 +84,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reward(self):
               
+
         reward = 0
         euclidian_distance = self.euclidian_distance(self.current_hand_pos, self.target)
         penalty = 1 - (1 / 1000**euclidian_distance)
@@ -97,66 +99,63 @@ class EffectorTwoLinkArmEnv(gym.Env):
     
     def reset(self, episode):
         
+        #Change Target according to episode
         
-        '''
         if episode % 2 == 0 :
-            self.target = onp.array([-0.2, 0.55]) #[x,y]
+            self.target = th.tensor([-0.2, 0.55])
         else:
-            self.target = onp.array([0.45, 0.55]) #[x,y]
-        '''
-        if self.task_version == "delay_task":
-            self.targets_pos = onp.array([0.0, 0.0, 0.0, 0.0])
-
+            self.target = th.tensor([0.45, 0.55])
         
+        
+
+        #Reset Motornet Effector
         self.two_link_arm.reset()
 
+        #Get state dictionary from motornet effector 
         state_dict = self.two_link_arm.states
 
-        self.joints = onp.array(state_dict.get("joint")).squeeze() #import from effector module instead
-        self.fingertip = onp.array(state_dict.get("fingertip")).squeeze()
-        self.activation = onp.array(state_dict.get("activation"))
+        #Get joint angles/velocities as well as fingertip xy position
+        self.joints = (state_dict.get("joint")).squeeze(0)
+        self.fingertip = (state_dict.get("fingertip")).squeeze(0)
+        self.current_hand_pos = self.fingertip
 
-
-        if self.task_version == "delay_task":
-           
-            self.obs_state = onp.concatenate([self.targets_pos, self.joints, self.activation])
-
-        if self.task_version == "original":
-            self.obs_state = onp.concatenate([self.target, self.joints, self.activation, self.fingertip])
-    
+        self.obs_state = th.cat([self.target, self.joints, self.fingertip]).unsqueeze(0)
 
         self.render_2(self.joints[:2])
-        return onp.array(self.obs_state, dtype = onp.float32)
+
+        return self.obs_state
 
     def done(self, t):
+
         # Get hand position
         hand_pos = self.current_hand_pos
+
         # See if distance is out of range
         if self.euclidian_distance(hand_pos, self.target) < self.target_radius:
             return True
+        
         # Terminate if at max timestep
         if t == self.max_timesteps:
             return True
+        
         return False  
         
-    def step(self, episode_steps, action, h_current, total_episodes=0):  ##pass in episode number
-        #Take step in environment and integrate, default is Euler
+    def step(self, episode_steps, action,total_episodes=0): 
+
         
+        #Take step in environment and integrate, default is Euler
         self.two_link_arm.step(action)    
 
         #Effector returns states as dictionary of "joint", "cartesian", "muscle", "geometry", "fingertip", "activation"
         state_dict = self.two_link_arm.states
-
+       
         #Extract states       
-        self.joints = onp.array(state_dict.get("joint").squeeze()) 
-        self.fingertip = onp.array(state_dict.get("fingertip")).squeeze() 
-        self.activation = onp.array(state_dict.get("activation")).squeeze()
-
-
-        #Extract hand pos for reward
-        self.current_hand_pos = onp.array(state_dict.get("fingertip").squeeze())
+        self.joints = (state_dict.get("joint")).squeeze(0)
+        self.fingertip = (state_dict.get("fingertip")).squeeze(0)
         
-        self.obs_state = onp.concatenate([self.target, self.joints, self.activation, self.fingertip])
+        self.current_hand_pos = self.fingertip
+         
+        self.obs_state = th.cat([self.target, self.joints, self.fingertip]).unsqueeze(0)
 
         # Get reward
         reward = self.reward()
@@ -168,11 +167,13 @@ class EffectorTwoLinkArmEnv(gym.Env):
         self.render_2(self.joints[:2])
         
         # Return environment variables
-        return onp.array(self.obs_state, dtype=onp.float32), onp.array([reward],  dtype=onp.float32), onp.array([done], dtype = onp.float32)
+        return self.obs_state, reward,  done
     
 
     def euclidian_distance(self, a, b):
-        return onp.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+        #ensure tensors are 1 dimensional to calculate distance
+        a = a.squeeze(0)
+        return th.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
 
 
@@ -187,7 +188,7 @@ class EffectorTwoLinkArmEnv(gym.Env):
 
     #Visualization and Pygame
     def __p1(self, q):
-
+        q_ = onp.array(q.clone().detach())
         
         """
             Position of the first mass
@@ -196,12 +197,14 @@ class EffectorTwoLinkArmEnv(gym.Env):
             Output: 
                 x_1 - position of mass 1 
         """
-        x = self._l1 * onp.cos(q[0]) 
-        y = self._l1 * onp.sin(q[0]) 
+        x = self._l1 * onp.cos(q_[0]) 
+        y = self._l1 * onp.sin(q_[0]) 
 
         return onp.asarray([x, y])
     
     def __p2(self, q):
+
+        q_ = onp.array(q.clone().detach())
         """
             Position of the second mass
             Input: 
@@ -209,12 +212,15 @@ class EffectorTwoLinkArmEnv(gym.Env):
             Output: 
                 x_2 - position of mass 2
         """
-        x = self._l1 * onp.sin(q[0]) + self._l2 * onp.sin(q[0] + q[1])
-        y = -self._l1 * onp.cos(q[0]) - self._l2 * onp.cos(q[0] + q[1])
+        x = self._l1 * onp.sin(q_[0]) + self._l2 * onp.sin(q_[0] + q_[1])
+        y = -self._l1 * onp.cos(q_[0]) - self._l2 * onp.cos(q_[0] + q_[1])
 
         return onp.asarray([x, y])
 
     def render_2(self, q):
+
+        #convert tensors to np arrays 
+        target = onp.array(self.target)
 
         if self.screen is None:
             pygame.init()
@@ -249,10 +255,9 @@ class EffectorTwoLinkArmEnv(gym.Env):
             end_pos = (2.2 * scale + offset, 1 * scale + offset),
             color = (0,0,0),
         )
-
         pygame.draw.circle(
             surface,
-            center = onp.ndarray.tolist(self.target*scale + offset), 
+            center = onp.ndarray.tolist(target*scale + offset), 
             radius = 2,
             color = (255,0,0)
 
@@ -293,8 +298,6 @@ class EffectorTwoLinkArmEnv(gym.Env):
                 onp.array(pygame.surfarray.pixels3d(self.screen)), axes = (1,0,2)
             )
 
-    def euclidian_distance(self, a, b):
-        return onp.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
     def close(self):
         if self.viewer:

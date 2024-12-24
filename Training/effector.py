@@ -454,7 +454,6 @@ class Effector(th.nn.Module):
       "muscle": self.muscle.integrate(dt, state_derivative["muscle"], states["muscle"], states["geometry"]),
       "joint": self.skeleton.integrate(dt, state_derivative["joint"], states["joint"])}
     new_states["geometry"] = self.get_geometry(new_states["joint"])
-    new_states["activation"] = np.array(action)
     
     return new_states
 

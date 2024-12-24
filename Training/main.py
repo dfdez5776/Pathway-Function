@@ -34,8 +34,8 @@ def main():
         kwargs=dict(lr=args.lr),
     )
 
-
     if args.algorithm == "optimization":
+
         setup = optimizer(env,
                           args.max_episodes,
                           args.inp_dim,
@@ -44,7 +44,7 @@ def main():
                           args.action_scale,
                           args.action_bias)
 
-    if args.algorithm == "SAC":
+    elif args.algorithm == "SAC":
 
         setup = Off_Policy_Agent(args.policy_replay_size,  
                                     args.policy_batch_size, 

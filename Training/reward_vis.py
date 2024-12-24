@@ -31,10 +31,50 @@ def average_reward_vis(reward_save_path, vis_save_path):
         vis_save_path = f'{vis_save_path}_average.png'
         plt.savefig(vis_save_path)
 
+def interval_reward_vis(reward_save_path, vis_save_path):
 
+    if type(reward_save_path) == str:
+        data0 = np.load(reward_save_path, allow_pickle=True)
+        data = data0.item()
+    
+    steps = np.array(data.get('all_episode_steps'))
+    reward_array = np.array(data.get('all_episode_rewards'))
+    num_episodes = np.size(reward_array)
+    
+    #initialize counter and tuple of interval averages
+    i = 0
+    interval = 100 #size of intervals to take average over
+    interval_averages_rew = []
+    interval_averages_step = []
 
-     
-#Function to Visualize Gradients (On Policy Method)
+    while i < num_episodes:
+        interval_rewards = reward_array[i: i + interval]
+        interval_steps = steps[i: i + interval]
+        interval_average_rewards = np.mean(interval_rewards) 
+        interval_average_steps = np.mean(interval_steps)
+        interval_averages_rew.append(interval_average_rewards)
+        interval_averages_step.append(interval_average_steps)
+        i += interval
+    
+    x0 = np.size(interval_averages_rew) + 1
+    x = np.arange(1, x0)
+    
+    figure, subplot = plt.subplots(2)
+    figure.suptitle('Average Rewards/Steps over Interval ( Sparse)')
+    subplot[0].scatter(x, interval_averages_rew, color = 'black', linewidth = .5)
+    subplot[0].plot(x, interval_averages_rew, color = 'red', linewidth = .5) 
+    subplot[0].set_title('Average Reward over Interval')
+    subplot[1].scatter(x, interval_averages_step, color = 'black', linewidth = .5)
+    subplot[1].plot(x, interval_averages_step, color = 'red', linewidth = .5) 
+    subplot[1].set_title('Average # Steps over Interval')
+    plt.xlabel('Inverval # (n = 50 episodes)')
+
+    if __name__ == "__main__":
+        plt.show()
+    else:
+        vis_save_path = f'{vis_save_path}_interval.png'
+        plt.savefig(vis_save_path)
+    
 def gradient_vis(reward_save_path, vis_save_path):
 
     if type(reward_save_path) == str:
@@ -76,9 +116,6 @@ def loss_vis(reward_save_path, vis_save_path):
     sampled_entropies = data["sampled_entropies"]
     batch_entropies = data["batch_entropies"]
     alpha = data["alpha"]
-
-    print(alpha)
-
 
     figure, subplot = plt.subplots(4)
     subplot[0].plot(actor_loss, label = 'actor loss')

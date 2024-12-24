@@ -9,273 +9,467 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from reward_vis import activity_vis
+import json
 
 ######### MULTIREGIONAL MODEL ##########
+class Region(nn.Module):
+    """
+    A class representing a region in a neural network that models connections 
+    to other regions along with other properties such as cell types and firing rates.
+    
+    Attributes:
+        num_units (int): Number of neurons in the region.
+        base_firing (torch.Tensor): Baseline firing rate for each neuron in the region.
+        device (torch.device): The device on which to store the tensors (e.g., 'cpu' or 'cuda').
+        cell_type_info (dict): Dictionary specifying each cell type and the proportion of neurons each type occupies.
+        connections (dict): Dictionary to store the connections to other regions.
+        masks (dict): Masks for each cell type and region properties (e.g., full mask, zero mask).
+    """
+    
+    def __init__(self, num_units, base_firing, device, cell_types=None):
+        """
+        Initializes the Region class.
+        
+        Args:
+            num_units (int): Number of neurons in the region.
+            base_firing (float): Baseline firing rate for the region.
+            device (torch.device): The device ('cpu' or 'cuda').
+            cell_types (dict, optional): A dictionary specifying the proportions of different cell types in the region.
+        """
+        super(Region, self).__init__()
 
-class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device, test_train):
-        super(RNN_MultiRegional, self).__init__()
-
-        '''
-            Multi-Regional RNN model, implements interaction between striatum and ALM
-            
-            parameters:
-                inp_dim: dimension of input
-                hid_dim: number of hidden neurons, each region and connection between region has hid_dim/2 neurons
-                action_dim: output dimension, should be one for lick or no lick
-        '''
-
-        # Network Variables
-        self.inp_dim = inp_dim
-        self.hid_dim = hid_dim
-        self.action_dim = action_dim
-        self.action_scale = action_scale 
-        self.action_bias = action_bias
+        self.num_units = num_units
         self.device = device
-        self.test_train = test_train
+        self.base_firing = base_firing * torch.ones(size=(num_units,))
+        self.cell_type_info = cell_types if cell_types is not None else {}
+        self.connections = {}
+        self.masks = {}
 
-        # Masks for individual regions
-        self.m1_mask = torch.cat([torch.zeros(size=(hid_dim*3,)), torch.ones(size=(hid_dim,))]).to(device)
-        self.thal_mask = torch.cat([torch.zeros(size=(hid_dim*2,)), torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,))]).to(device)
-        self.str_mask =  0.3 * torch.cat([torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim*3,))]).to(device)
-        self.m1_thal_str_mask = torch.cat([0.3 * torch.ones(size=(hid_dim,)), torch.zeros(size=(hid_dim,)), torch.ones(size=(hid_dim,)), torch.ones(size=(hid_dim,))]).to(device)
-        self.zeros = torch.zeros(size=(hid_dim, hid_dim)).to(device)
+        self._generate_masks()
 
-        #Tonic inputs
-        #str thal and motor cortex, give each like 0.5?
-        #str, stn, snr, thal, m1
-        self.str_tonic = torch.zeros(size = (self.hid_dim,)).to(device)
-        self.stn_tonic =  0.1 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.snr_tonic = 0.1 * torch.ones(size = (self.hid_dim,)).to(device)
-        self.thal_tonic = 0.1 *torch.ones(size = (self.hid_dim,)).to(device)
-        self.m1_tonic =  torch.zeros(size = (self.hid_dim,)).to(device)
+    def add_connection(
+        self, 
+        proj_region_name, 
+        proj_region, 
+        src_region_cell_type, 
+        dst_region_cell_type, 
+        sign, 
+        zero_connection=False, 
+        lower_bound=0, 
+        upper_bound=1e-2
+    ):
+        """
+        Adds a connection from the current region to a specified projection region.
         
+        Args:
+            proj_region_name (str): Name of the region that the current region connects to.
+            proj_region (Region): The target region to which the connection is made.
+            src_region_cell_type (str, optional): The source region's cell type.
+            dst_region_cell_type (str, optional): The destination region's cell type.
+            sign (str, optional): Specifies if the connection is excitatory or inhibitory ('inhib' for inhibitory).
+            zero_connection (bool, optional): If True, no connections are created (default is False).
+            lower_bound (float, optional): Lower bound for uniform weight initialization.
+            upper_bound (float, optional): Upper bound for uniform weight initialization.
+        """
+        connection_properties = {}
+
+        # Initialize connection parameters
+        if not zero_connection:
+            parameter = torch.empty(size=(proj_region.num_units, self.num_units)).uniform_(lower_bound, upper_bound)
+        else:
+            parameter = torch.zeros(size=(proj_region.num_units, self.num_units))
+
+        # Store trainable parameter
+        connection_properties["parameter"] = parameter.to(self.device)
+
+        # Initialize connection tensors (1s for active connections, 0s for no connections)
+        connection_tensor = torch.ones_like(parameter).to(self.device) if not zero_connection else torch.zeros_like(parameter).to(self.device)
+
+        # Create weight masks based on cell types, if specified
+        weight_mask_src, sign_matrix_src = self._get_weight_and_sign_matrices(src_region_cell_type, connection_tensor)
+        weight_mask_dst, sign_matrix_dst = proj_region._get_weight_and_sign_matrices(dst_region_cell_type, connection_tensor)
+
+        # Combine masks
+        weight_mask = weight_mask_src * weight_mask_dst
+        sign_matrix = sign_matrix_src * sign_matrix_dst
+
+        # Adjust the sign matrix for inhibitory connections
+        if sign == "inhib":
+            sign_matrix *= -1
+        elif sign is None:
+            sign_matrix = torch.zeros_like(parameter).to(self.device)
+
+        # Store weight mask and sign matrix
+        connection_properties["weight_mask"] = weight_mask.to(self.device)
+        connection_properties["sign_matrix"] = sign_matrix.to(self.device)
+
+        # Update connections dictionary
+        if proj_region_name in self.connections:
+            self.connections[proj_region_name]["weight_mask"] += connection_properties["weight_mask"]
+            self.connections[proj_region_name]["sign_matrix"] += connection_properties["sign_matrix"]
+        else:
+            self.connections[proj_region_name] = connection_properties
+
+    def _generate_masks(self):
+        """
+        Generates masks for the region, including full and zero masks, and specific cell-type masks.
+        """
+        full_mask = torch.ones(size=(self.num_units,)).to(self.device)
+        zero_mask = torch.zeros(size=(self.num_units,)).to(self.device)
+
+        self.masks["full"] = full_mask
+        self.masks["zero"] = zero_mask
+
+        for key in self.cell_type_info:
+            mask = self._generate_cell_type_mask(key)
+            self.masks[key] = mask.to(self.device)
+
+    def _generate_cell_type_mask(self, key):
+        """
+        Generates a mask for a specific cell type based on its proportion in the region.
+
+        Args:
+            key (str): The cell type identifier.
+
+        Returns:
+            torch.Tensor: Mask for the specified cell type.
+        """
+        cur_masks = []
+        for prev_key in self.cell_type_info:
+            if prev_key == key:
+                cur_masks.append(torch.ones(size=(int(round(self.num_units * self.cell_type_info[prev_key])),)))
+            else:
+                cur_masks.append(torch.zeros(size=(int(round(self.num_units * self.cell_type_info[prev_key])),)))
+        mask = torch.cat(cur_masks)
+        return mask
+
+    def _get_weight_and_sign_matrices(self, cell_type, connection_tensor):
+        """
+        Retrieves the weight mask and sign matrix for a specified cell type.
+
+        Args:
+            cell_type (str): The cell type to generate the mask for.
+            connection_tensor (torch.Tensor): Tensor indicating whether connections are active.
+
+        Returns:
+            tuple: weight mask and sign matrix.
+        """
+        if cell_type is not None:
+            weight_mask = connection_tensor * self.masks.get(cell_type, connection_tensor)
+            sign_matrix = connection_tensor * self.masks.get(cell_type, connection_tensor)
+        else:
+            weight_mask = connection_tensor
+            sign_matrix = connection_tensor
+
+        return weight_mask, sign_matrix
+
+    def has_connection_to(self, region):
+        """
+        Checks if there is a connection from the current region to the specified region.
         
-        self.tonic_inp = torch.cat([self.str_tonic,
-                                         self.stn_tonic,
-                                         self.snr_tonic,
-                                         self.thal_tonic,
-                                         self.m1_tonic])
+        Args:
+            region (str): Name of the region to check for connection.
+        
+        Returns:
+            bool: True if there is a connection, otherwise False.
+        """
+        return region in self.connections
+
+
+class mRNN(nn.Module):
+    """
+    A Multi-Regional Recurrent Neural Network (mRNN) that implements interactions between brain regions.
+    This model is designed to simulate neural interactions between different brain areas, with support
+    for region-specific properties and inter-regional connections.
+
+    Key Features:
+    - Supports multiple brain regions with distinct properties
+    - Implements Dale's Law for biological plausibility
+    - Handles region-specific cell types
+    - Includes noise injection for both hidden states and inputs
+    - Supports tonic (baseline) firing rates for each region
+
+    Args:
+        config (str): Path to JSON configuration file specifying network architecture
+        inp_dim (int): Dimension of the input
+        noise_level_act (float, optional): Noise level for activations. Defaults to 0.01
+        noise_level_inp (float, optional): Noise level for inputs. Defaults to 0.01
+        constrained (bool, optional): Whether to apply Dale's Law constraints. Defaults to True
+        t_const (float, optional): Time constant for network dynamics. Defaults to 0.1
+        device (str, optional): Computing device to use. Defaults to "cuda"
+    """
+
+    def __init__(
+        self, 
+        config,
+        inp_dim, 
+        noise_level_act=0.01, 
+        noise_level_inp=0.01, 
+        constrained=True, 
+        t_const=0.1,
+        device="cuda",
+    ):
+        super(mRNN, self).__init__()
+        
+        # Initialize network parameters
+        self.region_dict = {}
+        self.inp_dim = inp_dim
+        self.constrained = constrained
+        self.device = device
+        self.t_const = t_const
+        self.sigma_recur = noise_level_act
+        self.sigma_input = noise_level_inp
+
+        # Load and process configuration
+        with open(config, 'r') as f:
+            config = json.load(f)
+        
+        # Generate network structure
+        self.__gen_regions(config["regions"])
+        self.__gen_connections(config["connections"])
+        
+        # Generate weight matrices and masks
+        self.W_rec, self.W_rec_mask, self.W_rec_sign_matrix = self.gen_w_rec()
+        self.total_num_units = self.__get_total_num_units()
+        self.tonic_inp = self.__get_tonic_inp()
+
+        # Get indices for specific regions
+        self.alm_start_idx, self.alm_end_idx = self.get_region_indices("alm")
+        self.thal_mask = self.__gen_region_mask("thal")
+
+    def gen_w_rec(self):
+        """
+        Generates the full recurrent connectivity matrix and associated masks.
+        
+        Returns:
+            tuple: (W_rec, W_rec_mask, W_rec_sign_matrix)
+                - W_rec: Learnable weight matrix
+                - W_rec_mask: Binary mask for allowed connections
+                - W_rec_sign_matrix: Sign constraints for Dale's Law
+        """
+        region_connection_columns = []
+        region_weight_mask_columns = []
+        region_sign_matrix_columns = []
+
+        for cur_region in self.region_dict:
+            self.__get_full_connectivity(self.region_dict[cur_region])
+
+            # Collect connections, masks, and sign matrices for current region
+            connections_from_region = []
+            weight_mask_from_region = []
+            sign_matrix_from_region = []
+
+            for connection in self.region_dict.keys():
+                region_data = self.region_dict[cur_region].connections[connection]
+                connections_from_region.append(region_data["parameter"])
+                weight_mask_from_region.append(region_data["weight_mask"])
+                sign_matrix_from_region.append(region_data["sign_matrix"])
             
+            # Concatenate region-specific matrices
+            region_connection_columns.append(torch.cat(connections_from_region, dim=0))
+            region_weight_mask_columns.append(torch.cat(weight_mask_from_region, dim=0))
+            region_sign_matrix_columns.append(torch.cat(sign_matrix_from_region, dim=0))
         
+        # Create final matrices
+        W_rec = nn.Parameter(torch.cat(region_connection_columns, dim=1))
+        W_rec_mask = torch.cat(region_weight_mask_columns, dim=1)
+        W_rec_sign = torch.cat(region_sign_matrix_columns, dim=1)
 
+        return W_rec, W_rec_mask, W_rec_sign
 
-        # Inhibitory Connections
-        self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.str2thal_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Mix of Excitatory and Inhibitory Connections
-        self.m12m1_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.thal2m1_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.m12thal_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.thal2str_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Excitatory Connections
-        self.str2stn_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-        # Inhibitory Connections
-        self.stn2thal_weight_l0_hh = nn.Parameter(torch.empty(size=(hid_dim, hid_dim)))
-
-
-        self.bias = nn.Parameter(torch.empty(size =(1, 4*hid_dim)))
-
-        nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform(self.str2thal_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.thal2m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12thal_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.thal2str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.str2stn_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.stn2thal_weight_l0_hh, 0, 0.01)
-
-
-        # Implement Necessary Masks
-        # Striatum recurrent weights
-        sparse_matrix = torch.empty_like(self.str2str_weight_l0_hh)
-        nn.init.sparse_(sparse_matrix, 0.85)
-        sparse_mask = torch.where(sparse_matrix != 0, 1, 0)
-        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).to(device)
-        self.str2str_fixed = (torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask).to(device)
-        self.str2str_D = -1*torch.eye(hid_dim).to(device)
-
-        self.m12m1_D = torch.eye(hid_dim).to(device)
-        self.m12m1_D[hid_dim-(int(0.3*hid_dim)):, 
-                        hid_dim-(int(0.3*hid_dim)):] *= -1
+    def apply_dales_law(self):
+        """
+        Applies Dale's Law constraints to the recurrent weight matrix.
+        Dale's Law states that a neuron can be either excitatory or inhibitory, but not both.
         
-        # ALM to striatum weights
-        self.m12str_mask_excitatory = torch.ones(size=(hid_dim, hid_dim - int(0.3*hid_dim))).to(device)
-        self.m12str_mask_inhibitory = torch.zeros(size=(hid_dim, int(0.3*hid_dim))).to(device)
-        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).to(device)
+        Returns:
+            torch.Tensor: Constrained weight matrix
+        """
+        return (self.W_rec_mask * F.relu(self.W_rec)) * self.W_rec_sign_matrix
 
-        # M1 to thal mask
-        self.m12thal_mask = torch.cat([torch.zeros(size=(int(hid_dim/2), hid_dim)),
-                                       torch.ones(size=(int(hid_dim/2), hid_dim))]).to(device)
+    def forward(self, inp, cue_inp, hn, xn, inhib_stim, noise=True):
+        """
+        Forward pass through the network.
 
-        # STR to STN mask
-        self.str2stn_mask = torch.cat([torch.zeros(hid_dim, int(hid_dim/2)),
-                                       torch.ones(hid_dim, int(hid_dim/2))], dim=1).to(device)
+        Args:
+            inp (torch.Tensor): Input sequence (target timing)
+            cue_inp (torch.Tensor): Cue input sequence
+            hn (torch.Tensor): Hidden state
+            xn (torch.Tensor): Pre-activation hidden state
+            inhib_stim (torch.Tensor): Inhibitory stimulus
+            noise (bool, optional): Whether to apply noise. Defaults to True
 
-        
-        #No Disinhibition:
-        #STR to Thal D and no mask
-        self.str2thal_mask = torch.cat([torch.ones(hid_dim, int(hid_dim/2)),
-                                       torch.zeros(hid_dim, int(hid_dim/2))], dim=1).to(device) 
-        
-        #stn2thal
-        self.stn2thal_D = -1 * torch.eye(hid_dim).to(device) 
-
-        
-        # Input weights
-        self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim * 4)))
-        nn.init.uniform_(self.inp_weight, 0, 0.1)
-
-        # Behavioral output layer
-        self.mean_linear = nn.Linear(hid_dim * 4, action_dim)
-        self.std_linear = nn.Linear(hid_dim * 4, action_dim)
-
-        # Time constants for networks
-        self.t_const = 0.1
-
-        self.activity_dict = {'d1 right reach' : [],
-                              'd2 right reach' : [],
-                              'stn right reach' : [], 
-                              'snr right reach' : [],
-                              'thal right reach' : [],
-                              'motor right reach' : [],
-                              'd1 left reach' : [],
-                              'd2 left reach' : [],
-                              'stn left reach' : [], 
-                              'snr left reach' : [],
-                              'thal left reach' : [],
-                              'motor left reach' : [],}
-
-    def forward(self, inp, hn, xn, iteration, iteration0):
-
-        '''
-            Forward pass through the model
-            
-            Parameters:
-                inp: input sequence, should be scalar values denoting the target time
-                hn: the hidden state of the model
-                x: hidden state before activation
-        '''
-
-        # Saving hidden states
-        hn_next = hn.squeeze(0)  
-        xn_next = xn.squeeze(0)    
+        Returns:
+            torch.Tensor: Network output sequence
+        """
+        hn_next = hn.squeeze(0)
+        xn_next = xn.squeeze(0)
         size = inp.shape[1]
         new_hs = []
         new_xs = []
-      
-        #get full weights for training dishinhibition
-        str2str_rec = (self.str2str_mask * F.hardtanh(self.str2str_weight_l0_hh, min_val=1e-10, max_val=1) + self.str2str_fixed) @ self.str2str_D
-        m12m1_rec = F.hardtanh(self.m12m1_weight_l0_hh, min_val=1e-10, max_val=1) @ self.m12m1_D
-        m12str_rec = self.m12str_mask * F.hardtanh(self.m12str_weight_l0_hh, min_val=1e-10, max_val=1)
-        str2thal_rec = self.str2thal_mask * F.hardtanh(self.str2thal_weight_l0_hh, min_val=1e-10, max_val=1)
-        thal2m1_rec = F.hardtanh(self.thal2m1_weight_l0_hh, min_val=1e-10, max_val=1)
-        m12thal_rec = F.hardtanh(self.m12thal_weight_l0_hh, min_val=1e-10, max_val=1)
-        thal2str_rec = F.hardtanh(self.thal2str_weight_l0_hh, min_val=1e-10, max_val=1)
-        str2stn_rec = self.str2stn_mask * F.hardtanh(self.str2stn_weight_l0_hh, min_val=1e-10, max_val=1)
-        stn2thal_rec = F.hardtanh(self.stn2thal_weight_l0_hh, min_val=1e-10, max_val=1) @ self.stn2thal_D 
-        inp_weight = F.hardtanh(self.inp_weight, 1e-10, 1)
-        bias = F.hardtanh(self.bias, 1e-10, 1)
-     
 
-        # Concatenate into single weight matrix
+        # Apply Dale's Law if constrained
+        W_rec = self.apply_dales_law() if self.constrained else self.W_rec
 
-                            # STR           STN          Thal         Cortex
-        W_str = torch.cat([str2str_rec, self.zeros, thal2str_rec, m12str_rec], dim=1)               # STR
-        W_stn = torch.cat([str2stn_rec, self.zeros, self.zeros, self.zeros], dim=1)                 # STN              
-        W_thal = torch.cat([str2thal_rec, stn2thal_rec,  self.zeros, m12thal_rec], dim=1)              # Thal
-        W_m1 = torch.cat([self.zeros, self.zeros, thal2m1_rec, m12m1_rec], dim=1)                   # Cortex
-        W_rec = torch.cat([W_str, W_stn, W_thal, W_m1], dim=0)
+        # Calculate noise terms
+        if noise:
+            perturb_hid = np.sqrt(2 * self.t_const * self.sigma_recur**2) * np.random.normal(0, 1)
+            perturb_inp = np.sqrt(2 * self.t_const * self.sigma_input**2) * np.random.normal(0, 1)
+        else:
+            perturb_hid = perturb_inp = 0
 
-        plt.imshow(W_rec.detach().cpu().numpy())
-        plt.colorbar()
-        plt.show()
-
-        # Loop through RNN
+        # Process sequence
         for t in range(size):
+            # Prepare ITI input
+            iti_act = inp[:, t, :] + perturb_inp
+            non_iti_mask = torch.zeros(
+                size=(iti_act.shape[0], self.total_num_units - self.region_dict["iti"].num_units),
+                device=self.device
+            )
+            iti_input = torch.cat([non_iti_mask, iti_act], dim=-1)
 
-            if self.test_train == "test":
-                self.get_activation(hn_next, iteration, iteration0)
+            # Update hidden state
+            xn_next = (xn_next 
+                      + self.t_const 
+                      * (-xn_next
+                         + (W_rec @ hn_next.T).T
+                         + iti_input
+                         + self.tonic_inp
+                         + inhib_stim[:, t, :]
+                         + (cue_inp[:, t, :] * self.thal_mask)
+                         + perturb_hid))
 
-            xn_next = ((1 - self.t_const) * xn_next
-                             + self.t_const * ((W_rec @ hn_next.T).T
-                             + (inp[:, t, :] @ inp_weight * self.str_mask))
-                             + bias)
-            
             hn_next = F.relu(xn_next)
             new_xs.append(xn_next)
             new_hs.append(hn_next)
-
-        # Collect hidden states
-        rnn_out = torch.stack(new_hs, dim = 1)
-        xn_out = torch.stack(new_xs, dim = 1)
-        hn_last = rnn_out[:, -1, :].unsqueeze(0)
-        xn_last = new_xs[-1].unsqueeze(0)
-
-        # Behavioral output layer
-        mean_out = self.mean_linear(rnn_out * self.m1_mask)
-        std_out = self.std_linear(rnn_out * self.m1_mask)
-        std_out = torch.clamp(std_out, min = -20, max = 10)
-
-        return mean_out, std_out, rnn_out, hn_last, xn_last
-    
-    def get_activation(self, hn_next, iteration, iteration0):
         
-        if iteration == iteration0 or iteration == iteration0 + 1: 
-          
-            if iteration % 2 == 1:
+        return torch.stack(new_hs, dim=1)
 
-                self.activity_dict['d1 right reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
-                self.activity_dict['d2 right reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
-                self.activity_dict['stn right reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
-                self.activity_dict['thal right reach'].append(torch.norm(hn_next[:,2*self.hid_dim:3*self.hid_dim ]))
-                self.activity_dict['motor right reach'].append(torch.norm(hn_next[:, 3*self.hid_dim: 4*self.hid_dim ]))
+    def get_region_indices(self, region):
+        """
+        Gets the start and end indices for a specific region in the hidden state vector.
 
-            elif iteration % 2 == 0:
-            #calculate activations
-                self.activity_dict['d1 left reach'].append(torch.norm(hn_next[:, 0: int(self.hid_dim/2)]))
-                self.activity_dict['d2 left reach'].append(torch.norm(hn_next[:, int(self.hid_dim/2):self.hid_dim]))
-                self.activity_dict['stn left reach'].append(torch.norm(hn_next[:, self.hid_dim:2*self.hid_dim]))                
-                self.activity_dict['thal left reach'].append(torch.norm(hn_next[:,2*self.hid_dim:3*self.hid_dim ]))
-                self.activity_dict['motor left reach'].append(torch.norm(hn_next[:, 3*self.hid_dim: 4*self.hid_dim ]))
-    
-    def sample(self, state, hn, xn, iteration, iteration0, reparameterize = True):
+        Args:
+            region (str): Name of the region
 
-        #if testing: get activity at each timestep
-        if self.test_train == "test":
-            self.get_activation(hn, iteration, iteration0)
+        Returns:
+            tuple: (start_idx, end_idx)
+        """
+        start_idx = 0
+        for cur_reg in self.region_dict:
+            if cur_reg == region:
+                return start_idx, start_idx + self.region_dict[cur_reg].num_units
+            start_idx += self.region_dict[cur_reg].num_units
+        return start_idx, start_idx
 
-        epsilon = 1e-4    
+    def __gen_regions(self, regions):
+        """
+        Generates region objects from configuration.
+
+        Args:
+            regions (list): List of region configurations
+        """
+        for region in regions:
+            self.region_dict[region["name"]] = Region(
+                num_units=region["num_units"],
+                base_firing=region["base_firing"],
+                device=self.device,
+                cell_types=region["cell_types"]
+            )
+
+    def __gen_connections(self, connections):
+        """
+        Generates inter-regional connections from configuration.
+
+        Args:
+            connections (list): List of connection configurations
+        """
+        for connection in connections:
+            self.region_dict[connection["src_region"]].add_connection(
+                proj_region_name=connection["dst_region"],
+                proj_region=self.region_dict[connection["dst_region"]],
+                src_region_cell_type=connection["src_region_cell_type"],
+                dst_region_cell_type=connection["dst_region_cell_type"],
+                sign=connection["sign"]
+            )
+
+    def __gen_region_mask(self, region, cell_type=None):
+        """
+        Generates a mask for a specific region and optionally a cell type.
+
+        Args:
+            region (str): Region name
+            cell_type (str, optional): Cell type within region. Defaults to None
+
+        Returns:
+            torch.Tensor: Binary mask
+        """
+        mask_type = "full" if cell_type is None else cell_type
+        mask = []
         
-        mean, log_std, rnn_out, hn, xn = self.forward(state, hn, xn, iteration, iteration0)
-
-        std = log_std.exp()
-        normal = Normal(mean, std)
-        noise = normal.rsample()
-
-        y_t = torch.tanh(noise)
+        for next_region in self.region_dict:
+            if region == next_region:
+                mask.append(self.region_dict[region].masks[mask_type])
+            else:
+                mask.append(self.region_dict[next_region].masks["zero"])
         
-        action = y_t * self.action_scale + self.action_bias
-        log_prob = normal.log_prob(noise)
+        return torch.cat(mask).to(self.device)
 
-        # Enforce the action_bounds
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        log_prob = log_prob.sum(-1, keepdim=True)
+    def __get_full_connectivity(self, region):
+        """
+        Ensures all possible connections are defined for a region, adding zero
+        connections where none are specified.
 
-        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        Args:
+            region (Region): Region object to complete connections for
+        """
+        for other_region in self.region_dict:
+            if not region.has_connection_to(other_region):
+                region.add_connection(
+                    other_region,
+                    self.region_dict[other_region],
+                    src_region_cell_type=None,
+                    dst_region_cell_type=None,
+                    sign=None,
+                    zero_connection=True
+                )
+
+    def __get_total_num_units(self):
+        """
+        Calculates total number of units across all regions.
+
+        Returns:
+            int: Total number of units
+        """
+        return sum(region.num_units for region in self.region_dict.values())
+
+    def __get_tonic_inp(self):
+        """
+        Collects baseline firing rates for all regions.
+
+        Returns:
+            torch.Tensor: Vector of baseline firing rates
+        """
+        return torch.cat([region.base_firing for region in self.region_dict.values()]).to(self.device) 
 
 
-        return action, log_prob, mean, rnn_out, hn, xn, std, self.activity_dict
+class BG_Network(nn.Module):
+    def __init__(self, config, inp_dim, action_dim, action_scale, action_bias, device):
+        super(BG_Network, self).__init__()
+        
+        self.inp_dim = inp_dim
+        self.config = config
+        self.action_dim = action_dim
+        self.action_scale = action_scale
+        self.action_bias = action_bias
+        self.device = device
+
+        self.mrnn = mRNN(config, inp_dim)
+        self.mean = nn.Linear(self.mrnn.region_dict["m1"].num_units, action_dim)
+        self.std = nn.Linear(self.mrnn.region_dict["m1"].num_units, action_dim)
+
+
 #Vanilla RNN for testing
-
-
 class RNN(nn.Module):
 
     def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
@@ -364,14 +558,6 @@ class RNN(nn.Module):
         #std layer
         init.xavier_normal_(self.std.weight)
         nn.init.constant_(self.std.bias, 0)
-
-
-
-
-
-
-        #for params in self params
-            #apply nn Xavier init to the params
    
 ########## SINGLE RNN MODEL ##########
 

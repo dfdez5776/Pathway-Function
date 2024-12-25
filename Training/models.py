@@ -1,184 +1,612 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.init as init
+import torch.optim as optim
 from torch.distributions import Normal
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import numpy as np
+import matplotlib.pyplot as plt
 import math
+from reward_vis import activity_vis
+import json
 
 ######### MULTIREGIONAL MODEL ##########
-
-class RNN_MultiRegional(nn.Module):
-    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
-        super(RNN_MultiRegional, self).__init__()
+class Region(nn.Module):
+    """
+    A class representing a region in a neural network that models connections 
+    to other regions along with other properties such as cell types and firing rates.
+    
+    Attributes:
+        num_units (int): Number of neurons in the region.
+        base_firing (torch.Tensor): Baseline firing rate for each neuron in the region.
+        device (torch.device): The device on which to store the tensors (e.g., 'cpu' or 'cuda').
+        cell_type_info (dict): Dictionary specifying each cell type and the proportion of neurons each type occupies.
+        connections (dict): Dictionary to store the connections to other regions.
+        masks (dict): Masks for each cell type and region properties (e.g., full mask, zero mask).
+    """
+    
+    def __init__(self, num_units, base_firing, device, cell_types=None):
+        """
+        Initializes the Region class.
         
-        '''
-            Multi-Regional RNN model, implements interaction between striatum and ALM
-            
-            parameters:
-                inp_dim: dimension of input
-                hid_dim: number of hidden neurons, each region and connection between region has hid_dim/2 neurons
-                action_dim: output dimension, should be one for lick or no lick
-        '''
+        Args:
+            num_units (int): Number of neurons in the region.
+            base_firing (float): Baseline firing rate for the region.
+            device (torch.device): The device ('cpu' or 'cuda').
+            cell_types (dict, optional): A dictionary specifying the proportions of different cell types in the region.
+        """
+        super(Region, self).__init__()
 
-        self.inp_dim = inp_dim
-        self.hid_dim = hid_dim
-        self.action_dim = action_dim
-        self.action_scale = action_scale 
-        self.action_bias = action_bias
+        self.num_units = num_units
         self.device = device
-        self.alm_mask = torch.cat([torch.zeros(size=(int(hid_dim/2),)), torch.ones(size=(int(hid_dim/2),))]).to(device)
-        self.str_mask = torch.cat([torch.ones(size=(int(hid_dim/2),)), torch.zeros(size=(int(hid_dim/2),))]).to(device)
+        self.base_firing = base_firing * torch.ones(size=(num_units,))
+        self.cell_type_info = cell_types if cell_types is not None else {}
+        self.connections = {}
+        self.masks = {}
+
+        self._generate_masks()
+
+    def add_connection(
+        self, 
+        proj_region_name, 
+        proj_region, 
+        src_region_cell_type, 
+        dst_region_cell_type, 
+        sign, 
+        zero_connection=False, 
+        lower_bound=0, 
+        upper_bound=1e-2
+    ):
+        """
+        Adds a connection from the current region to a specified projection region.
         
-        # Identity Matrix of 0.5 Not Trained
-        self.str2str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
-        # Excitatory Connections
-        self.str2m1_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
-        # Mix of Excitatory and Inhibitory Connections
-        self.m12m1_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
-        # Excitatory Connections
-        self.m12str_weight_l0_hh = nn.Parameter(torch.empty(size=(int(hid_dim/2), int(hid_dim/2))))
+        Args:
+            proj_region_name (str): Name of the region that the current region connects to.
+            proj_region (Region): The target region to which the connection is made.
+            src_region_cell_type (str, optional): The source region's cell type.
+            dst_region_cell_type (str, optional): The destination region's cell type.
+            sign (str, optional): Specifies if the connection is excitatory or inhibitory ('inhib' for inhibitory).
+            zero_connection (bool, optional): If True, no connections are created (default is False).
+            lower_bound (float, optional): Lower bound for uniform weight initialization.
+            upper_bound (float, optional): Upper bound for uniform weight initialization.
+        """
+        connection_properties = {}
 
-        nn.init.uniform_(self.str2str_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.str2m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
-        nn.init.uniform_(self.m12m1_weight_l0_hh, 0, 0.01)
+        # Initialize connection parameters
+        if not zero_connection:
+            parameter = torch.empty(size=(proj_region.num_units, self.num_units)).uniform_(lower_bound, upper_bound)
+        else:
+            parameter = torch.zeros(size=(proj_region.num_units, self.num_units))
 
-        # Implement Necessary Masks
-        # Striatum recurrent weights
-        sparse_matrix = torch.empty_like(self.str2str_weight_l0_hh)
-        nn.init.sparse_(sparse_matrix, 0.85)
-        sparse_mask = torch.where(sparse_matrix != 0, 1, 0)
-        self.str2str_mask = torch.zeros_like(self.str2str_weight_l0_hh).to(device)
-        self.str2str_fixed = (torch.empty_like(self.str2str_weight_l0_hh).uniform_(0, 0.01) * sparse_mask).to(device)
-        self.str2str_D = -1*torch.eye(int(hid_dim/2)).to(device)
+        # Store trainable parameter
+        connection_properties["parameter"] = parameter.to(self.device)
 
-        self.m12m1_D = torch.eye(int(hid_dim/2)).to(device)
-        self.m12m1_D[int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):, 
-                        int(hid_dim/2)-(int( 0.3*(hid_dim/2) )):] *= -1
+        # Initialize connection tensors (1s for active connections, 0s for no connections)
+        connection_tensor = torch.ones_like(parameter).to(self.device) if not zero_connection else torch.zeros_like(parameter).to(self.device)
+
+        # Create weight masks based on cell types, if specified
+        weight_mask_src, sign_matrix_src = self._get_weight_and_sign_matrices(src_region_cell_type, connection_tensor)
+        weight_mask_dst, sign_matrix_dst = proj_region._get_weight_and_sign_matrices(dst_region_cell_type, connection_tensor)
+
+        # Combine masks
+        weight_mask = weight_mask_src * weight_mask_dst
+        sign_matrix = sign_matrix_src * sign_matrix_dst
+
+        # Adjust the sign matrix for inhibitory connections
+        if sign == "inhib":
+            sign_matrix *= -1
+        elif sign is None:
+            sign_matrix = torch.zeros_like(parameter).to(self.device)
+
+        # Store weight mask and sign matrix
+        connection_properties["weight_mask"] = weight_mask.to(self.device)
+        connection_properties["sign_matrix"] = sign_matrix.to(self.device)
+
+        # Update connections dictionary
+        if proj_region_name in self.connections:
+            self.connections[proj_region_name]["weight_mask"] += connection_properties["weight_mask"]
+            self.connections[proj_region_name]["sign_matrix"] += connection_properties["sign_matrix"]
+        else:
+            self.connections[proj_region_name] = connection_properties
+
+    def _generate_masks(self):
+        """
+        Generates masks for the region, including full and zero masks, and specific cell-type masks.
+        """
+        full_mask = torch.ones(size=(self.num_units,)).to(self.device)
+        zero_mask = torch.zeros(size=(self.num_units,)).to(self.device)
+
+        self.masks["full"] = full_mask
+        self.masks["zero"] = zero_mask
+
+        for key in self.cell_type_info:
+            mask = self._generate_cell_type_mask(key)
+            self.masks[key] = mask.to(self.device)
+
+    def _generate_cell_type_mask(self, key):
+        """
+        Generates a mask for a specific cell type based on its proportion in the region.
+
+        Args:
+            key (str): The cell type identifier.
+
+        Returns:
+            torch.Tensor: Mask for the specified cell type.
+        """
+        cur_masks = []
+        for prev_key in self.cell_type_info:
+            if prev_key == key:
+                cur_masks.append(torch.ones(size=(int(round(self.num_units * self.cell_type_info[prev_key])),)))
+            else:
+                cur_masks.append(torch.zeros(size=(int(round(self.num_units * self.cell_type_info[prev_key])),)))
+        mask = torch.cat(cur_masks)
+        return mask
+
+    def _get_weight_and_sign_matrices(self, cell_type, connection_tensor):
+        """
+        Retrieves the weight mask and sign matrix for a specified cell type.
+
+        Args:
+            cell_type (str): The cell type to generate the mask for.
+            connection_tensor (torch.Tensor): Tensor indicating whether connections are active.
+
+        Returns:
+            tuple: weight mask and sign matrix.
+        """
+        if cell_type is not None:
+            weight_mask = connection_tensor * self.masks.get(cell_type, connection_tensor)
+            sign_matrix = connection_tensor * self.masks.get(cell_type, connection_tensor)
+        else:
+            weight_mask = connection_tensor
+            sign_matrix = connection_tensor
+
+        return weight_mask, sign_matrix
+
+    def has_connection_to(self, region):
+        """
+        Checks if there is a connection from the current region to the specified region.
         
-        # ALM to striatum weights
-        self.m12str_mask_excitatory = torch.ones(size=(int(hid_dim/2), int(hid_dim/2) - int(0.3*(hid_dim/2)))).to(device)
-        self.m12str_mask_inhibitory = torch.zeros(size=(int(hid_dim/2), int(0.3*(hid_dim/2)))).to(device)
-        self.m12str_mask = torch.cat([self.m12str_mask_excitatory, self.m12str_mask_inhibitory], dim=1).to(device)
+        Args:
+            region (str): Name of the region to check for connection.
         
-        # Input weights
-        self.inp_weight = nn.Parameter(torch.empty(size=(inp_dim, hid_dim)))
-        nn.init.uniform_(self.inp_weight, 0, 0.1)
+        Returns:
+            bool: True if there is a connection, otherwise False.
+        """
+        return region in self.connections
 
-        # Behavioral output layer
-        self.mean_linear = nn.Linear(hid_dim, action_dim)
-        self.std_linear = nn.Linear(hid_dim, action_dim)
 
-        # Time constants for networks (not sure what would be biologically plausible?)
-        t_str = 0.1 * torch.ones(int(hid_dim/2))
-        t_m1_excitatory = 0.1 * torch.ones(int(hid_dim/2) - int(0.3*(hid_dim/2)))
-        t_m1_inhibitory = 0.1 * torch.ones(int(0.3*(hid_dim/2)))
-        self.t_const = torch.cat([t_str, t_m1_excitatory, t_m1_inhibitory]).to(device)
+class mRNN(nn.Module):
+    """
+    A Multi-Regional Recurrent Neural Network (mRNN) that implements interactions between brain regions.
+    This model is designed to simulate neural interactions between different brain areas, with support
+    for region-specific properties and inter-regional connections.
 
-    def forward(self, inp, hn, x):
+    Key Features:
+    - Supports multiple brain regions with distinct properties
+    - Implements Dale's Law for biological plausibility
+    - Handles region-specific cell types
+    - Includes noise injection for both hidden states and inputs
+    - Supports tonic (baseline) firing rates for each region
 
-        '''
-            Forward pass through the model
+    Args:
+        config (str): Path to JSON configuration file specifying network architecture
+        inp_dim (int): Dimension of the input
+        noise_level_act (float, optional): Noise level for activations. Defaults to 0.01
+        noise_level_inp (float, optional): Noise level for inputs. Defaults to 0.01
+        constrained (bool, optional): Whether to apply Dale's Law constraints. Defaults to True
+        t_const (float, optional): Time constant for network dynamics. Defaults to 0.1
+        device (str, optional): Computing device to use. Defaults to "cuda"
+    """
+
+    def __init__(
+        self, 
+        config,
+        inp_dim, 
+        noise_level_act=0.01, 
+        noise_level_inp=0.01, 
+        constrained=True, 
+        t_const=0.1,
+        device="cuda",
+    ):
+        super(mRNN, self).__init__()
+        
+        # Initialize network parameters
+        self.region_dict = {}
+        self.inp_dim = inp_dim
+        self.constrained = constrained
+        self.device = device
+        self.t_const = t_const
+        self.sigma_recur = noise_level_act
+        self.sigma_input = noise_level_inp
+
+        # Load and process configuration
+        with open(config, 'r') as f:
+            config = json.load(f)
+        
+        # Generate network structure
+        self.__gen_regions(config["regions"])
+        self.__gen_connections(config["connections"])
+        
+        # Generate weight matrices and masks
+        self.W_rec, self.W_rec_mask, self.W_rec_sign_matrix = self.gen_w_rec()
+        self.total_num_units = self.__get_total_num_units()
+        self.tonic_inp = self.__get_tonic_inp()
+
+        # Get indices for specific regions
+        self.alm_start_idx, self.alm_end_idx = self.get_region_indices("alm")
+        self.thal_mask = self.__gen_region_mask("thal")
+
+    def gen_w_rec(self):
+        """
+        Generates the full recurrent connectivity matrix and associated masks.
+        
+        Returns:
+            tuple: (W_rec, W_rec_mask, W_rec_sign_matrix)
+                - W_rec: Learnable weight matrix
+                - W_rec_mask: Binary mask for allowed connections
+                - W_rec_sign_matrix: Sign constraints for Dale's Law
+        """
+        region_connection_columns = []
+        region_weight_mask_columns = []
+        region_sign_matrix_columns = []
+
+        for cur_region in self.region_dict:
+            self.__get_full_connectivity(self.region_dict[cur_region])
+
+            # Collect connections, masks, and sign matrices for current region
+            connections_from_region = []
+            weight_mask_from_region = []
+            sign_matrix_from_region = []
+
+            for connection in self.region_dict.keys():
+                region_data = self.region_dict[cur_region].connections[connection]
+                connections_from_region.append(region_data["parameter"])
+                weight_mask_from_region.append(region_data["weight_mask"])
+                sign_matrix_from_region.append(region_data["sign_matrix"])
             
-            Parameters:
-                inp: input sequence, should be scalar values denoting the target time
-                hn: the hidden state of the model
-                x: hidden state before activation
-        '''
+            # Concatenate region-specific matrices
+            region_connection_columns.append(torch.cat(connections_from_region, dim=0))
+            region_weight_mask_columns.append(torch.cat(weight_mask_from_region, dim=0))
+            region_sign_matrix_columns.append(torch.cat(sign_matrix_from_region, dim=0))
+        
+        # Create final matrices
+        W_rec = nn.Parameter(torch.cat(region_connection_columns, dim=1))
+        W_rec_mask = torch.cat(region_weight_mask_columns, dim=1)
+        W_rec_sign = torch.cat(region_sign_matrix_columns, dim=1)
 
-        # Saving hidden states
+        return W_rec, W_rec_mask, W_rec_sign
+
+    def apply_dales_law(self):
+        """
+        Applies Dale's Law constraints to the recurrent weight matrix.
+        Dale's Law states that a neuron can be either excitatory or inhibitory, but not both.
+        
+        Returns:
+            torch.Tensor: Constrained weight matrix
+        """
+        return (self.W_rec_mask * F.relu(self.W_rec)) * self.W_rec_sign_matrix
+
+    def forward(self, inp, cue_inp, hn, xn, inhib_stim, noise=True):
+        """
+        Forward pass through the network.
+
+        Args:
+            inp (torch.Tensor): Input sequence (target timing)
+            cue_inp (torch.Tensor): Cue input sequence
+            hn (torch.Tensor): Hidden state
+            xn (torch.Tensor): Pre-activation hidden state
+            inhib_stim (torch.Tensor): Inhibitory stimulus
+            noise (bool, optional): Whether to apply noise. Defaults to True
+
+        Returns:
+            torch.Tensor: Network output sequence
+        """
         hn_next = hn.squeeze(0)
-        x_next = x.squeeze(0)
+        xn_next = xn.squeeze(0)
         size = inp.shape[1]
         new_hs = []
         new_xs = []
 
-        # Get full weights for training
-        str2str_rec = (self.str2str_mask * F.relu(self.str2str_weight_l0_hh) + self.str2str_fixed) @ self.str2str_D
-        m12m1_rec = F.relu(self.m12m1_weight_l0_hh) @ self.m12m1_D
-        m12str_rec = self.m12str_mask * F.relu(self.m12str_weight_l0_hh)
-        str2m1_rec = F.relu(self.str2m1_weight_l0_hh)
+        # Apply Dale's Law if constrained
+        W_rec = self.apply_dales_law() if self.constrained else self.W_rec
 
-        # Concatenate into single weight matrix
-        W_str = torch.cat([str2str_rec, m12str_rec], dim=1)
-        W_alm = torch.cat([str2m1_rec, m12m1_rec], dim=1)
-        W_rec = torch.cat([W_str, W_alm], dim=0)
+        # Calculate noise terms
+        if noise:
+            perturb_hid = np.sqrt(2 * self.t_const * self.sigma_recur**2) * np.random.normal(0, 1)
+            perturb_inp = np.sqrt(2 * self.t_const * self.sigma_input**2) * np.random.normal(0, 1)
+        else:
+            perturb_hid = perturb_inp = 0
 
-        # Loop through RNN
+        # Process sequence
         for t in range(size):
-            x_next = (1 - self.t_const) * x_next + self.t_const * ((W_rec @ hn_next.T).T + (inp[:, t, :] @ self.inp_weight * self.str_mask))
-            hn_next = F.relu(x_next)
+            # Prepare ITI input
+            iti_act = inp[:, t, :] + perturb_inp
+            non_iti_mask = torch.zeros(
+                size=(iti_act.shape[0], self.total_num_units - self.region_dict["iti"].num_units),
+                device=self.device
+            )
+            iti_input = torch.cat([non_iti_mask, iti_act], dim=-1)
+
+            # Update hidden state
+            xn_next = (xn_next 
+                      + self.t_const 
+                      * (-xn_next
+                         + (W_rec @ hn_next.T).T
+                         + iti_input
+                         + self.tonic_inp
+                         + inhib_stim[:, t, :]
+                         + (cue_inp[:, t, :] * self.thal_mask)
+                         + perturb_hid))
+
+            hn_next = F.relu(xn_next)
+            new_xs.append(xn_next)
             new_hs.append(hn_next)
-            new_xs.append(x_next)
         
-        # Collect hidden states
-        rnn_out = torch.stack(new_hs, dim=1)
-        x_out = torch.stack(new_xs, dim=1)
-        hn_last = rnn_out[:, -1, :].unsqueeze(0)
-        x_last = x_out[:, -1, :].unsqueeze(0)
+        return torch.stack(new_hs, dim=1)
 
-        # Behavioral output layer
-        mean_out = self.mean_linear(rnn_out * self.alm_mask)
-        std_out = self.std_linear(rnn_out * self.alm_mask)
+    def get_region_indices(self, region):
+        """
+        Gets the start and end indices for a specific region in the hidden state vector.
 
-        return mean_out, std_out, rnn_out, hn_last, x_last, x_out
-    
-    def sample(self, state, hn, x, sampling):
+        Args:
+            region (str): Name of the region
 
-        epsilon = 1e-4   
+        Returns:
+            tuple: (start_idx, end_idx)
+        """
+        start_idx = 0
+        for cur_reg in self.region_dict:
+            if cur_reg == region:
+                return start_idx, start_idx + self.region_dict[cur_reg].num_units
+            start_idx += self.region_dict[cur_reg].num_units
+        return start_idx, start_idx
 
-        mean, log_std, rnn_out, hn, x_last, x_out = self.forward(state, hn, x)
+    def __gen_regions(self, regions):
+        """
+        Generates region objects from configuration.
 
-        mean_size = mean.size()
-        log_std_size = log_std.size()
+        Args:
+            regions (list): List of region configurations
+        """
+        for region in regions:
+            self.region_dict[region["name"]] = Region(
+                num_units=region["num_units"],
+                base_firing=region["base_firing"],
+                device=self.device,
+                cell_types=region["cell_types"]
+            )
 
-        mean = mean.reshape(-1, mean.size()[-1])
-        log_std = log_std.reshape(-1, log_std.size()[-1])
+    def __gen_connections(self, connections):
+        """
+        Generates inter-regional connections from configuration.
 
-        std = log_std.exp()
-        normal = Normal(mean, std)
-        x_t = normal.rsample()
+        Args:
+            connections (list): List of connection configurations
+        """
+        for connection in connections:
+            self.region_dict[connection["src_region"]].add_connection(
+                proj_region_name=connection["dst_region"],
+                proj_region=self.region_dict[connection["dst_region"]],
+                src_region_cell_type=connection["src_region_cell_type"],
+                dst_region_cell_type=connection["dst_region_cell_type"],
+                sign=connection["sign"]
+            )
 
-        y_t = torch.tanh(x_t)
+    def __gen_region_mask(self, region, cell_type=None):
+        """
+        Generates a mask for a specific region and optionally a cell type.
+
+        Args:
+            region (str): Region name
+            cell_type (str, optional): Cell type within region. Defaults to None
+
+        Returns:
+            torch.Tensor: Binary mask
+        """
+        mask_type = "full" if cell_type is None else cell_type
+        mask = []
         
-        action = y_t * self.action_scale + self.action_bias
+        for next_region in self.region_dict:
+            if region == next_region:
+                mask.append(self.region_dict[region].masks[mask_type])
+            else:
+                mask.append(self.region_dict[next_region].masks["zero"])
+        
+        return torch.cat(mask).to(self.device)
 
-        log_prob = normal.log_prob(x_t)
+    def __get_full_connectivity(self, region):
+        """
+        Ensures all possible connections are defined for a region, adding zero
+        connections where none are specified.
 
-        # Enforce the action_bounds
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        log_prob = log_prob.sum(-1, keepdim=True)
+        Args:
+            region (Region): Region object to complete connections for
+        """
+        for other_region in self.region_dict:
+            if not region.has_connection_to(other_region):
+                region.add_connection(
+                    other_region,
+                    self.region_dict[other_region],
+                    src_region_cell_type=None,
+                    dst_region_cell_type=None,
+                    sign=None,
+                    zero_connection=True
+                )
 
-        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+    def __get_total_num_units(self):
+        """
+        Calculates total number of units across all regions.
 
-        if sampling == False:
-            action = action.reshape(mean_size[0], mean_size[1], mean_size[2])
-            log_prob = log_prob.reshape(log_std_size[0], log_std_size[1], 1) 
-            mean = mean.reshape(mean_size[0], mean_size[1], mean_size[2])
+        Returns:
+            int: Total number of units
+        """
+        return sum(region.num_units for region in self.region_dict.values())
 
-        return action, log_prob, mean, rnn_out, hn, x_last, x_out
+    def __get_tonic_inp(self):
+        """
+        Collects baseline firing rates for all regions.
 
-    
+        Returns:
+            torch.Tensor: Vector of baseline firing rates
+        """
+        return torch.cat([region.base_firing for region in self.region_dict.values()]).to(self.device) 
 
-########## SINGLE RNN MODEL ##########
 
+class BG_Network(nn.Module):
+    def __init__(self, config, inp_dim, action_dim, action_scale, action_bias, device):
+        super(BG_Network, self).__init__()
+        
+        self.inp_dim = inp_dim
+        self.config = config
+        self.action_dim = action_dim
+        self.action_scale = action_scale
+        self.action_bias = action_bias
+        self.device = device
+
+        self.mrnn = mRNN(config, inp_dim)
+        self.mean = nn.Linear(self.mrnn.region_dict["m1"].num_units, action_dim)
+        self.std = nn.Linear(self.mrnn.region_dict["m1"].num_units, action_dim)
+
+
+#Vanilla RNN for testing
 class RNN(nn.Module):
-    def __init__(self, inp_dim, hid_dim):
+
+    def __init__(self, inp_dim, hid_dim, action_dim, action_scale, action_bias, device):
         super(RNN, self).__init__()
 
         self.inp_dim = inp_dim
         self.hid_dim = hid_dim
-        
-        self.fc1 = nn.Linear(inp_dim, hid_dim)
-        self.rnn = nn.RNN(hid_dim, hid_dim, batch_first=True)
-        self.fc2 = nn.Linear(hid_dim, 1)
-    
-    def forward(self, x, hn):
-        
-        out = F.relu(self.fc1(x))
-        out, _ = self.rnn(out, hn)
-        out = self.fc2(out)
+        self.action_dim = action_dim
+        self.action_scale = action_scale
+        self.action_bias = action_bias
+        self.device = device
 
-        return out
+        self.f1 = nn.Linear(self.inp_dim, self.hid_dim)
+        self.gru = nn.GRU(self.hid_dim, self.hid_dim, batch_first=True)
+        self.f2 = nn.Linear(self.hid_dim, self.hid_dim)
+
+        self.mean = nn.Linear(self.hid_dim, self.action_dim)
+        self.std = nn.Linear(self.hid_dim, self.action_dim)
+
+        self.epsilon = 1e-4
+
+        self.initialize_weights()
+
+
+    def forward(self, state, h_prev):
         
+        x =  F.relu(self.f1(state))
+
+        print(x.shape, h_prev.shape)
+
+        x, hn_next = self.gru(x, h_prev)
+
+        x = F.relu(self.f2(x))
+
+        mean = self.mean(x)
+
+        log_std = self.std(x)
+        log_std = torch.clamp(log_std, min = -20, max = 1)  #between 0 and 1
+
+        return mean, log_std, x, hn_next
+
+
+    def sample(self, state, h_prev):
+
+       
+
+        mean, log_std, rnn_out, hn = self.forward(state, h_prev)
+
+        std = log_std.exp()
+
+        probs = Normal(mean, std)
+        noise = probs.rsample()
+
+        y_t = torch.tanh(noise) 
+        action = y_t * self.action_scale + self.action_bias
+
+        log_prob = probs.log_prob(noise)
+        log_prob -= torch.log(self.action_scale * (1-y_t.pow(2)) + self.epsilon)
+        log_prob = log_prob.sum(-1, keepdim=True)
+
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias 
+       
+        return action, log_prob, mean, rnn_out, hn, std
+    
+    def initialize_weights(self):
+
+        #first layer
+        init.xavier_normal_(self.f1.weight)
+        nn.init.constant_(self.f1.bias, 0)
+
+        #Second layer 
+        for name, param in self.gru.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0)
+            else:
+                init.xavier_normal_(param)
+
+        #final layer
+        init.xavier_normal_(self.f2.weight)
+        nn.init.constant_(self.f2.bias, 0)
+        
+        #mean layer
+        init.xavier_normal_(self.mean.weight)
+        nn.init.constant_(self.mean.bias, 0)
+
+        #std layer
+        init.xavier_normal_(self.std.weight)
+        nn.init.constant_(self.std.bias, 0)
+   
+########## SINGLE RNN MODEL ##########
+
+class Critic(nn.Module):
+    def __init__(self, inp_dim, action_dim, hid_dim):
+        super(Critic, self).__init__()
+        
+        self.fc1 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc2 = nn.GRU(hid_dim, hid_dim, batch_first=True)
+        self.q_out = nn.Linear(hid_dim, 1)
+
+    def forward(self, state, action, hn):
+        
+        with torch.no_grad():
+            xu = torch.cat([state, action], dim=2)
+        
+        out1 = F.relu(self.fc1(xu))
+        out1, _ = self.fc2(out1, hn)
+        q_val = self.q_out(out1)
+
+        return q_val
+    
+class Critic2(nn.Module):
+    def __init__(self, inp_dim, action_dim, hid_dim):
+        super(Critic2, self).__init__()
+
+        self.fc11 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc12 = nn.GRU(hid_dim, hid_dim, batch_first = True)
+        self.fc13 = nn.Linear(hid_dim, 1)
+
+        self.fc21 = nn.Linear(inp_dim + action_dim, hid_dim)
+        self.fc22 = nn.GRU(hid_dim, hid_dim, batch_first = True)
+        self.fc23 = nn.Linear(hid_dim, 1)
+
+    def forward(self, state, action, hn):
+
+        xu = torch.cat([state, action], dim = -1)
+        
+        out1 = F.relu(self.fc11(xu))
+        out1, _ = self.fc12(out1, hn)
+        out1 = self.fc13(out1)
+
+
+        out2 = F.relu(self.fc21(xu))
+        out2, _ = self.fc22(out2, hn)
+        out2 = self.fc23(out2)
+
+        return out1, out2 
+
+
+
+

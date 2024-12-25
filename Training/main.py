@@ -4,12 +4,16 @@ import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
 
-from agent_training import OptimizerSpec, On_Policy_Agent
+from agent_training import OptimizerSpec, On_Policy_Agent, Off_Policy_Agent
+from optimization import optimizer 
 from two_link_env import TwoLinkArmEnv
+from motornet_env import EffectorTwoLinkArmEnv
 import torch
 import config
+import os
 
 def main():
+
 
     ### PARAMETERS ###
     parser = config.config_parser()
@@ -17,7 +21,7 @@ def main():
 
     ### CREATE ENVIRONMENT ###
     torch.manual_seed(args.seed)
-    env = TwoLinkArmEnv(args.max_timesteps, args.render_mode)
+    env = EffectorTwoLinkArmEnv(args.max_timesteps, args.render_mode, args.task_version, args.test_train, args.inp_dim)
 
     ### OPTIMIZERS ###
     optimizer_spec_actor = OptimizerSpec(
@@ -30,24 +34,51 @@ def main():
         kwargs=dict(lr=args.lr),
     )
 
-    rl_setup = On_Policy_Agent(env,
-                                args.seed,
-                                args.inp_dim,
-                                args.hid_dim,
-                                args.action_dim,
-                                optimizer_spec_actor,
-                                optimizer_spec_critic,
-                                args.gamma,
-                                args.save_iter,
-                                args.log_steps,
-                                args.frame_skips,
-                                args.model_save_path,
-                                args.reward_save_path,
-                                args.steps_save_path,
-                                args.action_scale,
-                                args.action_bias)
+    if args.algorithm == "optimization":
 
-    rl_setup.train(args.max_steps)
+        setup = optimizer(env,
+                          args.max_episodes,
+                          args.inp_dim,
+                          args.hid_dim,
+                          args.action_dim,
+                          args.action_scale,
+                          args.action_bias)
+
+    elif args.algorithm == "SAC":
+
+        setup = Off_Policy_Agent(args.policy_replay_size,  
+                                    args.policy_batch_size, 
+                                    args.policy_batch_iters,
+                                    args.lr,
+                                    args.alpha,
+                                    env, 
+                                    args.seed,
+                                    args.inp_dim,
+                                    args.hid_dim,
+                                    args.action_dim,
+                                    optimizer_spec_actor,
+                                    optimizer_spec_critic,
+                                    args.tau,  
+                                    args.gamma,
+                                    args.save_iter,
+                                    args.log_steps,
+                                    args.frame_skips,
+                                    args.model_save_path,
+                                    args.buffer_save_path,
+                                    args.reward_save_path,
+                                    args.vis_save_path,
+                                    args.action_scale,
+                                    args.action_bias,
+                                    args.automatic_entropy_tuning,
+                                    args.continue_training,
+                                    args.test_train )
+
+    
+    
+    if args.test_train == "test":
+        setup.test(args.max_steps) 
+    else:
+        setup.train(args.max_steps, args.continue_training)
 
 if __name__ == '__main__':
     main()

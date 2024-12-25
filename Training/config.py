@@ -64,6 +64,12 @@ def config_parser():
                         type=int, 
                         default=100, 
                         help='number of timesteps for single episode (num / dt)')
+    
+    parser.add_argument('--max_episodes', 
+                        type=int, 
+                        default=6000, 
+                        help='maximum episodes to run')
+    
     parser.add_argument('--render_mode', 
                         type=str, 
                         default="human", 
@@ -94,14 +100,61 @@ def config_parser():
                         type=str, 
                         default='',
                         help='path to folder and file name of model to save (do not put extension pth)')
-
+    parser.add_argument('--buffer_save_path', 
+                        type=str, 
+                        default='',
+                        help='path to save buffer replay list')
     parser.add_argument('--reward_save_path', 
                         type=str, 
                         default='',
                         help='path to folder and file name to save rewards (do not put extension .npy)')
 
-    parser.add_argument('--steps_save_path', 
+    parser.add_argument('--vis_save_path', 
                         type=str, 
-                        help='path to folder and file name to save episode steps (do not put extension .npy)')
-
+                        help='path to folder and file name to save visualizations (do not put extension .npy)')
+    
+    parser.add_argument('--test_train', 
+                        type=str, 
+                        default="no",
+                        help='load in checkpoint or not to continue training')
+    
+    parser.add_argument('--continue_training', 
+                        type=str, 
+                        default="no", 
+                        help='option to continue training a previous model')
+    
+    parser.add_argument('--algorithm', 
+                        type=str, 
+                        default="SAC", 
+                        help='which algorithm to use. SAC, Actor-Critic w Eligibility trace, Optimization')
+    parser.add_argument('--policy_replay_size', 
+                        type=int, 
+                        default=4000, 
+                        help='size of replay buffer for SAC')
+    parser.add_argument('--policy_batch_size', 
+                        type=int, 
+                        default=8, 
+                        help='Size of sample from replay memory to update')
+    parser.add_argument('--policy_batch_iters', 
+                        type=int, 
+                        default=1, 
+                        help='how many time to repeat replay step')
+    parser.add_argument('--tau', 
+                        type=float, 
+                        default=0.005, 
+                        help='constant for critic update')
+    parser.add_argument('--automatic_entropy_tuning', 
+                        type=bool, 
+                        default=True, 
+                        help='maximize entropy and include loss for it')
+    parser.add_argument('--alpha', 
+                        type= float, 
+                        default= 0.2, 
+                        help='SAC critic loss constant')
+    
+    parser.add_argument('--task_version', 
+                        type=str, 
+                        default= "original", 
+                        help='different versions of task for arm environment. Delay_task modeled after Li et al paper')
+    
     return parser

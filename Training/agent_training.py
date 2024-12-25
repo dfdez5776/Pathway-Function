@@ -446,6 +446,4 @@ class Off_Policy_Agent():
         #Soft Update Actor Critic
         self.soft_update(self.target_critic, self.critic, self.tau)
 
-        
 
-        

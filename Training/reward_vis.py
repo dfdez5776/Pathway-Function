@@ -174,7 +174,7 @@ def activity_vis(reward_save_path, vis_save_path, display):
        vis_save_path = f'{vis_save_path}_activity.png'
        plt.savefig(vis_save_path) 
 
-#test
+
     
 
 def main():
